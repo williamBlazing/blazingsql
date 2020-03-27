@@ -27,6 +27,10 @@ const std::string LEFT_JOIN = "left";
 const std::string RIGHT_JOIN = "right";
 const std::string OUTER_JOIN = "full";
 
+// ALEX TODO:
+// update all has_next() or next_exists() => has_next_now()
+// update ArrayCache to be what it should be
+
 class PartwiseJoin : public PhysicalPlan {
 public:
 	PartwiseJoin(const std::string & queryString, std::shared_ptr<Context> context)
@@ -38,15 +42,21 @@ public:
 		this->max_right_ind = -1;
 	}
 
-	// WSM Revisit this. THese is code missing
 	std::unique_ptr<ral::frame::BlazingTable> load_set(BatchSequence & input, bool load_all){
 		
 		std::size_t bytes_loaded = 0;
 		std::vector<std::unique_ptr<ral::frame::BlazingTable>> tables_loaded;
-		// WSM has_next should be a next_exists()
-		while (input.has_next() && bytes_loaded < SET_SIZE_THRESHOLD) {
+		if (input.wait_for_next()){
 			tables_loaded.emplace_back(input.next());
-			bytes_loaded ++ tables_loaded.back()->sizeInBytes(); 
+			bytes_loaded += tables_loaded.back()->sizeInBytes(); 
+		} else {
+			return nullptr;
+		}
+
+		while ((input.has_next_now() && bytes_loaded < SET_SIZE_THRESHOLD) ||
+					(load_all && input.wait_for_next())) {
+			tables_loaded.emplace_back(input.next());
+			bytes_loaded += tables_loaded.back()->sizeInBytes(); 
 		}
 		if (tables_loaded.size() == 0){
 			return nullptr;
@@ -213,42 +223,42 @@ public:
 			std::tie(new_left_ind, new_right_ind) = check_for_another_set_to_do_with_data_we_already_have(left_ind, right_ind);
 			if (new_left_ind >= 0 || new_right_ind >= 0) {
 				if (new_left_ind >= 0) {
-					leftArrayCache.put(left_ind, std::move(left_batch));
+					this->leftArrayCache.put(left_ind, std::move(left_batch));
 					left_ind = new_left_ind;
-					left_batch = leftArrayCache.get(left_ind);
+					left_batch = this->leftArrayCache.get(left_ind);
 				} else {
-					rightArrayCache.put(right_ind, std::move(right_batch));
+					this->rightArrayCache.put(right_ind, std::move(right_batch));
 					right_ind = new_right_ind;
-					right_batch = rightArrayCache.get(right_ind);
+					right_batch = this->rightArrayCache.get(right_ind);
 				}
 			} else {
 				// lets try first to just grab the next one that is already available and waiting, but we keep one of the two sides we already have
-				if (left_sequence.next_exists()){
-					leftArrayCache.put(left_ind, std::move(left_batch));
+				if (this->left_sequence.next_exists()){
+					this->leftArrayCache.put(left_ind, std::move(left_batch));
 					left_batch = load_left_set();
 					left_ind = this->max_left_ind;
-				} else if (right_sequence.next_exists()){
-					rightArrayCache.put(right_ind, std::move(right_batch));
+				} else if (this->right_sequence.next_exists()){
+					this->rightArrayCache.put(right_ind, std::move(right_batch));
 					right_batch = load_right_set();
 					right_ind = this->max_right_ind;
 				} else {
 					// lets see if there are any in are matrix that have not been completed
 					std::tie(new_left_ind, new_right_ind) = check_for_set_that_has_not_been_completed();
 					if (new_left_ind >= 0 && new_right_ind >= 0) {
-						leftArrayCache.put(left_ind, std::move(left_batch));
+						this->leftArrayCache.put(left_ind, std::move(left_batch));
 						left_ind = new_left_ind;
-						left_batch = leftArrayCache.get(left_ind);
-						rightArrayCache.put(right_ind, std::move(right_batch));
+						left_batch = this->leftArrayCache.get(left_ind);
+						this->rightArrayCache.put(right_ind, std::move(right_batch));
 						right_ind = new_right_ind;
-						right_batch = rightArrayCache.get(right_ind);
+						right_batch = this->rightArrayCache.get(right_ind);
 					} else {
 						// nothing else for us to do buy wait and see if there are any left to do
-						if (left_sequence.has_next()){
-							leftArrayCache.put(left_ind, std::move(left_batch));
+						if (this->left_sequence.has_next()){
+							this->leftArrayCache.put(left_ind, std::move(left_batch));
 							left_batch = load_left_set();
 							left_ind = this->max_left_ind;
-						} else if (right_sequence.has_next()){
-							rightArrayCache.put(right_ind, std::move(right_batch));
+						} else if (this->right_sequence.has_next()){
+							this->rightArrayCache.put(right_ind, std::move(right_batch));
 							right_batch = load_right_set();
 							right_ind = this->max_right_ind;
 						} else {
@@ -319,8 +329,7 @@ public:
                         std::make_pair(context->getNode(nodeIndex), partition_table_view));
                 }
             }
-			// WSM need to figure out how to send only to one side (left or right)
-            ral::distribution::experimental::distributeTablePartitions(context.get(), partitions_to_send);			
+			ral::distribution::experimental::distributeTablePartitions(context.get(), partitions_to_send);			
 
 			if (sequence.wait_for_next()){
 				batch = sequence.next();
@@ -328,7 +337,7 @@ public:
 				done = true;
 			}
 		}
-		// WSM notify here
+		// ALEX add notify final here
 	}
 
 	virtual kstatus run() {
@@ -362,22 +371,29 @@ public:
 		std::thread distribute_left_thread(&JoinPartitionKernel::partition_table, context, 
 			this->left_column_indices, std::move(left_batch), std::ref(left_sequence), 
 			std::ref(this->output_.get_cache("output_a")));
+
+		// ALEX create thread with ExternalBatchColumnDataSequence for the left table being distriubted
+		// ExternalBatchColumnDataSequence external_input(context);
+		// std::unique_ptr<ral::frame::BlazingHostTable> host_table;
+		// while (host_table = external_input.next()) {	
+        //     this->output_.get_cache("output_a")->addHostFrameToCache(std::move(host_table));
+		// }
+
+
+		// ALEX clone context, increment step counter to make it so that the next partition_table will have different message id
 		
 		std::thread distribute_right_thread(&JoinPartitionKernel::partition_table, context, 
 			this->right_column_indices, std::move(right_batch), std::ref(right_sequence), 
 			std::ref(this->output_.get_cache("output_b")));
 
+		// ALEX create thread with ExternalBatchColumnDataSequence for the right table being distriubted
+
 		distribute_left_thread.join();
 		distribute_right_thread.join();
+		// ALEX join other threads
 
 		
-		// WSM how do I do this for the two sides?
-		ExternalBatchColumnDataSequence external_input(context);
-		std::unique_ptr<ral::frame::BlazingHostTable> host_table;
-		while (host_table = external_input.next()) {	
-            this->output_cache()->addHostFrameToCache(std::move(host_table));
-		}
-
+		
 		return kstatus::proceed;
 	}
 
@@ -397,30 +413,12 @@ private:
 
 
 
-
-// single node
 /*
+single node
+- PartwiseJoin (two inputs, one output)
 
-
-partwiseJoin
-
-loads should load a "min" amount. If we have too many nodes, the parts are too small
-too many small parts becomes too many small joins
-
-load A0, load B0
-join A0, B0
-load B1
-join A0, B1
-load BN
-join A0, BN
-load A1
-
-
-left outer join
-left side we do iteratively, right side we do the whole thing
-
-full outer join
-right and left we do the whole thing
-
-
+multi node
+- JoinPartitionKernel (two inputs, two outputs)
+- PartwiseJoin (two inputs, one output)
+*/
 
