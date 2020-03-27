@@ -90,19 +90,17 @@ private:
 };
 
 using frame_type = std::unique_ptr<ral::frame::BlazingTable>;
-static std::size_t message_count = {0};
 
 template <class T>
 class message {
 public:
-	message(std::unique_ptr<T> content, size_t index)
-		: data(std::move(content)), cache_index{index}, message_id(message_count) {
-		message_count++;
+	message(std::unique_ptr<T> content, size_t cache_index, size_t message_id = 0)
+		: data(std::move(content)), cache_index{cache_index}, message_id(message_id) {
 	}
 
 	virtual ~message() = default;
 
-	std::size_t get_id() { return (message_id); }
+	std::size_t get_message_id() { return (message_id); }
 
 	std::unique_ptr<T> releaseData() { return std::move(data); }
 	size_t cacheIndex() { return cache_index; }
@@ -112,7 +110,6 @@ protected:
 	size_t cache_index;
 	std::unique_ptr<T> data;
 };
-
 
 template <class T>
 class WaitingQueue {
@@ -133,6 +130,7 @@ public:
 		lock.unlock();
 		condition_variable_.notify_all();
 	}
+
 	void notify() { 
 		std::unique_lock<std::mutex> lock(mutex_);
 		this->finished = true;
@@ -149,6 +147,38 @@ public:
 		auto data = std::move(this->message_queue_.front());
 		this->message_queue_.pop_front();
 		return std::move(data);
+	}
+	bool wait_for_next() {
+		std::unique_lock<std::mutex> lock(mutex_);
+		condition_variable_.wait(lock, [&, this] { return !this->empty(); });
+		return true;
+	}
+
+	bool has_next_now() {
+		return !this->empty();
+	}
+
+	size_t wait_for_all() {
+		std::unique_lock<std::mutex> lock(mutex_);
+		condition_variable_.wait(lock, [&, this] { return this->finished.load(std::memory_order_seq_cst); });
+		return this->message_queue_.size();
+	}
+
+	message_ptr get_or_wait(size_t message_id) {
+		std::unique_lock<std::mutex> lock(mutex_);
+		condition_variable_.wait(lock, [message_id, this] { 
+				auto result = std::any_of(this->message_queue_.cbegin(),
+							this->message_queue_.cend(), [&](auto &e) {
+								return e->get_message_id() == message_id;
+							});
+				return this->finished.load(std::memory_order_seq_cst) or result;
+		 });
+		if(this->message_queue_.size() == 0) {
+			return nullptr;
+		}
+		auto data = std::move(this->message_queue_.front());
+		this->message_queue_.pop_front();
+		return std::move(data);  
 	}
 
 	message_ptr pop() {
@@ -209,13 +239,30 @@ public:
 
 	~CacheMachine();
 
-	virtual void addToCache(std::unique_ptr<ral::frame::BlazingTable> table);
+	virtual void insert(std::unique_ptr<ral::frame::BlazingTable> table, size_t message_id);
+
+	virtual std::unique_ptr<ral::frame::BlazingTable> get_or_wait(size_t index);
+
+	virtual void addToCache(std::unique_ptr<ral::frame::BlazingTable> table, size_t message_id = 0);
 
 	virtual void addHostFrameToCache(std::unique_ptr<ral::frame::BlazingHostTable> table);
 
 	virtual void finish();
 
 	bool is_finished();
+
+	bool wait_for_next() {
+		return this->waitingCache->wait_for_next();
+	}
+	
+	bool has_next_now() {
+		return this->waitingCache->has_next_now();
+	}
+
+	size_t wait_for_all() {
+		return this->waitingCache->wait_for_all();
+	}
+
 
 	virtual std::unique_ptr<ral::frame::BlazingTable> pullFromCache();
 
@@ -235,6 +282,15 @@ protected:
 	std::vector<unsigned long long> memoryPerCache;
 	std::vector<unsigned long long> usedMemory;
 };
+
+// class ArrayCache : public CacheMachine {
+// public:
+// 	CacheMachine(unsigned long long gpuMemory,
+// 		std::vector<unsigned long long> memoryPerCache,
+// 		std::vector<CacheDataType> cachePolicyTypes_);
+
+// 	~CacheMachine();
+// };
 
 class HostCacheMachine {
 public:
