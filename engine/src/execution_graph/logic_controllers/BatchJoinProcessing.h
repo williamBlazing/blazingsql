@@ -38,6 +38,7 @@ public:
 		this->max_right_ind = -1;
 	}
 
+	// WSM Revisit this. THese is code missing
 	std::unique_ptr<ral::frame::BlazingTable> load_set(BatchSequence & input, bool load_all){
 		
 		std::size_t bytes_loaded = 0;
@@ -45,7 +46,7 @@ public:
 		// WSM has_next should be a next_exists()
 		while (input.has_next() && bytes_loaded < SET_SIZE_THRESHOLD) {
 			tables_loaded.emplace_back(input.next());
-			bytes_loaded ++ tables_loaded.back()->sizeInBytes();
+			bytes_loaded ++ tables_loaded.back()->sizeInBytes(); 
 		}
 		if (tables_loaded.size() == 0){
 			return nullptr;
