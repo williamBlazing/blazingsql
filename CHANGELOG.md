@@ -3,3 +3,5 @@
 # should have an entry.                                             #
 #####################################################################
 #322 Added the ability to run count distinct queries in a distruted fashion
+#391 Added the ability to run count distinct queries in a distruted fashion
+#392 Remove the unnecessary messages on distributed mode
