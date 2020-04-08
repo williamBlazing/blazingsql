@@ -22,6 +22,13 @@ namespace ral {
 namespace cache {
 
 struct GraphProcessorTest : public cudf::test::BaseFixture {
+	void SetUp() {
+		rmmInitialize(nullptr);
+	}
+	void TearDown() {
+		rmmFinalize();
+	}
+	
 	using data_provider_pair =
 		std::pair<std::shared_ptr<ral::io::csv_parser>, std::shared_ptr<ral::io::uri_data_provider>>;
 

@@ -40,28 +40,37 @@ public:
 
 		BatchSequence input(this->input_cache(), this);
         int batch_count = 0;
+        int try_count = 0;
+        bool success = false;
         while (input.wait_for_next()) {
-			auto batch = input.next();
+			std::unique_ptr<ral::frame::BlazingTable> batch = input.next();
+            // ral::frame::BlazingTableView batch = input.next();
+            success = false;
+            while (!success && try_count < 20){
 
-            try {
-                std::unique_ptr<ral::frame::BlazingTable> output;
-                if(aggregation_types.size() == 0) {
-                    output = ral::operators::experimental::compute_groupby_without_aggregations(
-                            batch->toBlazingTableView(), group_column_indices);
-                } else if (group_column_indices.size() == 0) {
-                    output = ral::operators::experimental::compute_aggregations_without_groupby(
-                            batch->toBlazingTableView(), aggregation_input_expressions, aggregation_types, aggregation_column_assigned_aliases);                
-                } else {
-                    output = ral::operators::experimental::compute_aggregations_with_groupby(
-                        batch->toBlazingTableView(), aggregation_input_expressions, aggregation_types, aggregation_column_assigned_aliases, group_column_indices);
+                try {
+                    std::unique_ptr<ral::frame::BlazingTable> output;
+                    if(aggregation_types.size() == 0) {
+                        output = ral::operators::experimental::compute_groupby_without_aggregations(
+                                batch->toBlazingTableView(), group_column_indices);
+                    } else if (group_column_indices.size() == 0) {
+                        output = ral::operators::experimental::compute_aggregations_without_groupby(
+                                batch->toBlazingTableView(), aggregation_input_expressions, aggregation_types, aggregation_column_assigned_aliases);                
+                    } else {
+                        output = ral::operators::experimental::compute_aggregations_with_groupby(
+                            batch->toBlazingTableView(), aggregation_input_expressions, aggregation_types, aggregation_column_assigned_aliases, group_column_indices);
+                    }
+                    
+                    this->add_to_output_cache(std::move(output));
+                    success = true;
+                    
+                    batch_count++;
+                } catch(const std::exception& e) {
+                    // TODO add retry here
+                    try_count++;
+                    std::string err = "ERROR: in ComputeAggregateKernel batch " + std::to_string(batch_count) + " for " + expression + " Error message: " + std::string(e.what());
+                    std::cout<<err<<std::endl;
                 }
-                
-                this->add_to_output_cache(std::move(output));
-                batch_count++;
-            } catch(const std::exception& e) {
-                // TODO add retry here
-    			std::string err = "ERROR: in ComputeAggregateKernel batch " + std::to_string(batch_count) + " for " + expression + " Error message: " + std::string(e.what());
-                std::cout<<err<<std::endl;
             }
 		}
         // std::cout<<"ComputeAggregateKernel end "<<std::endl;
