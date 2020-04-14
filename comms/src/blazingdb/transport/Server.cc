@@ -157,6 +157,8 @@ void connectionHandler(ServerTCP *server, void *socket, int gpuId) {
 
     std::string ok_message(static_cast<char *>(local_message.data()),
                            local_message.size());
+
+    std::cout<<"ok_message: "<<ok_message<<std::endl;
     assert(ok_message == "OK");
     blazingdb::transport::io::writeToSocket(socket, "END", 3, false);
     // end of message
@@ -164,9 +166,13 @@ void connectionHandler(ServerTCP *server, void *socket, int gpuId) {
     std::string messageToken = message_metadata.messageToken;
     auto deserialize_function = server->getDeserializationFunction(
         messageToken.substr(0, messageToken.find('_')));
+
+        std::cout<<"about to deserialize mesage"<<std::endl;
     std::shared_ptr<GPUReceivedMessage> message = deserialize_function(message_metadata, address_metadata, column_offsets, raw_columns);
+    std::cout<<"deserializes mesage"<<std::endl;
     assert(message != nullptr);
     server->putMessage(message->metadata().contextToken, message);
+    std::cout<<"putMessage mesage"<<std::endl;
 
     // TODO: write success
   } catch (const zmq::error_t &e) {

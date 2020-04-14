@@ -85,11 +85,13 @@ std::cout<<"GetRawColumns writeToSocket2"<<std::endl;
     auto data_past_topic_size{sizeof(data_past_topic)};
     socket_ptr->getsockopt(ZMQ_RCVMORE, &data_past_topic,
                            &data_past_topic_size);
+    std::cout<<"data_past_topic "<<data_past_topic<<std::endl;
     // receive the ok
     zmq::message_t local_message;
     auto success = socket_ptr->recv(local_message);
     if (success.value() == false || local_message.size() == 0) {
       std::cerr << "Client:   throw zmq::error_t()" << std::endl;
+      std::cout << "Client:   throw zmq::error_t()" << std::endl;
       throw zmq::error_t();
     }
     std::cout<<"local_message.size() "<<local_message.size()<<std::endl;

@@ -174,6 +174,9 @@ public:
 		const Address::MetaData & address_metadata,
 		const std::vector<ColumnTransport> & columns_offsets,
 		const std::vector<rmm::device_buffer> & raw_buffers) {  // gpu pointer
+
+		std::cout<<"std::shared_ptr<GPUReceivedMessage> MakeFrom start"<<std::endl;
+
 		auto node = Node(Address::TCP(address_metadata.ip, address_metadata.comunication_port, address_metadata.protocol_port));
 		auto num_columns = columns_offsets.size();
 		std::vector<std::unique_ptr<cudf::column>> received_samples(num_columns);
@@ -221,6 +224,7 @@ public:
 		}
 		auto unique_table = std::make_unique<cudf::experimental::table>(std::move(received_samples));
 		auto received_table = std::make_unique<ral::frame::BlazingTable>(std::move(unique_table), column_names);
+		std::cout<<"std::shared_ptr<GPUReceivedMessage> MakeFrom end"<<std::endl;
 		return std::make_shared<GPUComponentReceivedMessage>(message_metadata.messageToken,
 			message_metadata.contextToken,
 			node,
