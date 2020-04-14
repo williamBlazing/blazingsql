@@ -47,6 +47,7 @@ public:
   void SetDevice(int gpuId) override { this->gpuId = gpuId; }
 
   Status Send(GPUMessage& message) override {
+    std::cout<<"SEND start"<<std::endl;
     void* fd = client_socket.fd();
     auto &node = message.getSenderNode();
     auto message_metadata = message.metadata();
@@ -62,19 +63,22 @@ public:
     std::vector<ColumnTransport> column_offsets;
     std::vector<std::unique_ptr<rmm::device_buffer>> temp_scope_holder;
     std::tie(buffer_sizes, buffers, column_offsets, temp_scope_holder) = message.GetRawColumns();
-
+    std::cout<<"GetRawColumns end"<<std::endl;
     write_metadata(fd, (int32_t)column_offsets.size());
+    std::cout<<"GetRawColumns write_metadata0"<<std::endl;
     blazingdb::transport::io::writeToSocket(
         fd, (char*)column_offsets.data(),
         sizeof(ColumnTransport) * column_offsets.size());
-
+std::cout<<"GetRawColumns writeToSocket0"<<std::endl;
     write_metadata(fd, (int32_t)buffer_sizes.size());
+    std::cout<<"GetRawColumns write_metadata1"<<std::endl;
     blazingdb::transport::io::writeToSocket(fd, (char*)buffer_sizes.data(),
                                             sizeof(int) * buffer_sizes.size());
-
+std::cout<<"GetRawColumns writeToSocket1"<<std::endl;
     blazingdb::transport::experimental::io::writeBuffersFromGPUTCP(column_offsets, buffer_sizes, buffers, fd, gpuId);
+    std::cout<<"GetRawColumns writeBuffersFromGPUTCP"<<std::endl;
     blazingdb::transport::io::writeToSocket(fd, "OK", 2, false);
-
+std::cout<<"GetRawColumns writeToSocket2"<<std::endl;
     zmq::socket_t* socket_ptr = (zmq::socket_t*)fd;
 
     int data_past_topic{0};
@@ -88,10 +92,11 @@ public:
       std::cerr << "Client:   throw zmq::error_t()" << std::endl;
       throw zmq::error_t();
     }
-
+    std::cout<<"local_message.size() "<<local_message.size()<<std::endl;
     std::string end_message(static_cast<char*>(local_message.data()),
                             local_message.size());
     assert(end_message == "END");
+    std::cout<<"SEND END"<<std::endl;
     return Status{true};
   }
 

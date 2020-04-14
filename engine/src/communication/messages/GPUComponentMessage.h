@@ -68,12 +68,14 @@ public:
 	}
 
 	virtual raw_buffer GetRawColumns() override {
+		// std::cout<<"GetRawColumns start"<<std::endl;
 		std::vector<int> buffer_sizes;
 		std::vector<const char *> raw_buffers;
 		std::vector<ColumnTransport> column_offset;
 		std::vector<std::unique_ptr<rmm::device_buffer>> temp_scope_holder;
 		for(int i = 0; i < table_view.num_columns(); ++i) {
 			const cudf::column_view&column = table_view.column(i);
+			// std::cout<<"GetRawColumns ColumnTransport"<<std::endl;
 			ColumnTransport col_transport = ColumnTransport{ColumnTransport::MetaData{
 																.dtype = (int32_t)column.type().id(),
 																.size = column.size(),
@@ -85,11 +87,13 @@ public:
 				.strings_data = -1,
 				.strings_offsets = -1,
 				.strings_nullmask = -1};
+				// std::cout<<"GetRawColumns strcpy"<<std::endl;
 			strcpy(col_transport.metadata.col_name, table_view.names().at(i).c_str());
 			
 			if (column.size() == 0) {
 				// do nothing
 			} else if(column.type().id() == cudf::type_id::STRING) {
+				// std::cout<<"GetRawColumns column.type().id() == cudf::type_id::STRING) {"<<std::endl;
 					cudf::strings_column_view str_col_view{column};
 
 					auto offsets_column = str_col_view.offsets();
@@ -97,6 +101,7 @@ public:
 
 					if (str_col_view.size() + 1 == offsets_column.size()){
 						// this column does not come from a buffer than had been zero-copy partitioned
+						std::cout<<"GetRawColumns this column does not come from a buffer than had been zero-copy partitioned"<<std::endl;
 						
 						col_transport.strings_data = raw_buffers.size();
 						buffer_sizes.push_back(chars_column.size());
@@ -115,6 +120,7 @@ public:
 						}
 					} else {
 						// this column comes from a column that was zero-copy partitioned
+						std::cout<<"GetRawColumns this column comes from a column that was zero-copy partitioned"<<std::endl;
 
 						std::pair<int32_t, int32_t> char_col_start_end = getCharsColumnStartAndEnd(str_col_view);
 
@@ -142,6 +148,7 @@ public:
 						}
 					}
 			} else {
+				std::cout<<"GetRawColumns notSTRING"<<std::endl;
 				col_transport.data = raw_buffers.size();
 				buffer_sizes.push_back(column.size() * cudf::size_of(column.type()));
 				raw_buffers.push_back(column.head<char>() + column.offset() * cudf::size_of(column.type())); // here we are getting the beginning of the buffer and manually calculating the offset.
@@ -159,6 +166,7 @@ public:
 			}
 			column_offset.push_back(col_transport);
 		}
+		std::cout<<"GetRawColumns end"<<std::endl;
 		return std::make_tuple(buffer_sizes, raw_buffers, column_offset, std::move(temp_scope_holder));
 	}
 

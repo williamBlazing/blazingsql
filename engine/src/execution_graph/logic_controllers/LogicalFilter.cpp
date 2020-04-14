@@ -128,6 +128,8 @@ std::unique_ptr<ral::frame::BlazingTable> process_filter(
     std::vector<int> & columnIndices,
     blazingdb::manager::experimental::Context * context) {
 
+      std::cout<<"process_distribution_table start"<<std::endl;
+
     std::vector<NodeColumnView > partitions;
     std::unique_ptr<CudfTable> hashed_data;
     if (table.num_rows() > 0){    
@@ -135,14 +137,19 @@ std::unique_ptr<ral::frame::BlazingTable> process_filter(
       std::vector<cudf::size_type> columns_to_hash;
       std::transform(columnIndices.begin(), columnIndices.end(), std::back_inserter(columns_to_hash), [](int index) { return (cudf::size_type)index; });
       
+      std::cout<<"hash_partition start"<<std::endl;
       std::vector<cudf::size_type> hased_data_offsets;
       std::tie(hashed_data, hased_data_offsets) = cudf::experimental::hash_partition(table.view(),
               columns_to_hash, context->getTotalNodes());
+
+              std::cout<<"hash_partition end"<<std::endl;
 
       // the offsets returned by hash_partition will always start at 0, which is a value we want to ignore for cudf::split
       std::vector<cudf::size_type> split_indexes(hased_data_offsets.begin() + 1, hased_data_offsets.end());
       std::vector<CudfTableView> partitioned = cudf::experimental::split(hashed_data->view(), split_indexes);
       
+      std::cout<<"cudf::experimental::split end"<<std::endl;
+
       for(int nodeIndex = 0; nodeIndex < context->getTotalNodes(); nodeIndex++ ){
           partitions.emplace_back(
             std::make_pair(context->getNode(nodeIndex), ral::frame::BlazingTableView(partitioned[nodeIndex], table.names())));
@@ -155,8 +162,11 @@ std::unique_ptr<ral::frame::BlazingTable> process_filter(
     }
 
   	context->incrementQuerySubstep();
+    std::cout<<"distributePartitions start"<<std::endl;
     ral::distribution::experimental::distributePartitions(context, partitions);
+    std::cout<<"collectPartitions start"<<std::endl;
     std::vector<NodeColumn> remote_node_columns = ral::distribution::experimental::collectPartitions(context);
+    std::cout<<"collectPartitions end"<<std::endl;
 
     std::vector<ral::frame::BlazingTableView> partitions_to_concat;
     for (int i = 0; i < remote_node_columns.size(); i++){
@@ -171,6 +181,7 @@ std::unique_ptr<ral::frame::BlazingTable> process_filter(
       }
     }
     assert(found_self_partition);
+    std::cout<<"concatTables start"<<std::endl;
     return ral::utilities::experimental::concatTables(partitions_to_concat);
   }
 
@@ -180,6 +191,8 @@ std::unique_ptr<ral::frame::BlazingTable> process_filter(
     const ral::frame::BlazingTableView & right,
     const std::string & query,
     blazingdb::manager::experimental::Context * context) {
+
+      std::cout<<"process_hash_based_distribution start"<<std::endl;
 
     std::vector<int> globalColumnIndices;
   	parseJoinConditionToColumnIndices(get_named_expression(query, "condition"), globalColumnIndices);
@@ -373,6 +386,8 @@ std::unique_ptr<ral::frame::BlazingTable> processJoin(
   const ral::frame::BlazingTableView & table_right_in,
   const std::string & expression){
 
+    std::cout<<"processJoin start"<<std::endl;
+
   std::string condition = get_named_expression(expression, "condition");
   std::string join_type = get_named_expression(expression, "joinType");
 
@@ -407,6 +422,8 @@ std::unique_ptr<ral::frame::BlazingTable> processJoin(
   ral::frame::BlazingTableView table_left = left_blazing_table->toBlazingTableView();
   ral::frame::BlazingTableView table_right = right_blazing_table->toBlazingTableView();
 
+  std::cout<<"processJoin normalized"<<std::endl;
+
   std::vector<std::pair<cudf::size_type, cudf::size_type>> columns_in_common;
 
   std::unique_ptr<CudfTable> result_table;
@@ -420,6 +437,7 @@ std::unique_ptr<ral::frame::BlazingTable> processJoin(
   }
 
   if(join_type == INNER_JOIN) {
+    std::cout<<"processJoin INNER_JOIN"<<std::endl;
     //Removing nulls on key columns before joining
     std::unique_ptr<CudfTable> table_left_dropna;
     std::unique_ptr<CudfTable> table_right_dropna;
@@ -441,6 +459,7 @@ std::unique_ptr<ral::frame::BlazingTable> processJoin(
       right_column_indices,
       columns_in_common);
   } else if(join_type == LEFT_JOIN) {
+    std::cout<<"processJoin LEFT_JOIN"<<std::endl;
     //Removing nulls on right key columns before joining
     std::unique_ptr<CudfTable> table_right_dropna;
 
@@ -457,12 +476,14 @@ std::unique_ptr<ral::frame::BlazingTable> processJoin(
       right_column_indices,
       columns_in_common);
   } else if(join_type == OUTER_JOIN) {
+    std::cout<<"full_join start"<<std::endl;
     result_table = cudf::experimental::full_join(
       table_left.view(),
       table_right.view(),
       left_column_indices,
       right_column_indices,
       columns_in_common);
+      std::cout<<"full_join end"<<std::endl;
   } else {
     RAL_FAIL("Unsupported join operator");
   }

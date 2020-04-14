@@ -232,10 +232,14 @@ void distributePartitions(Context * context, std::vector<NodeColumnView> & parti
 			continue;
 		}
 		BlazingTableView columns = nodeColumn.second;
+		std::cout<<"distributePartitions columns"<<std::endl;
+		ral::utilities::print_blazing_table_view_schema(columns);
 		auto destination_node = nodeColumn.first;
 		threads.push_back(std::thread([message_id, context_token, self_node, destination_node, columns]() mutable {
 			auto message = Factory::createColumnDataMessage(message_id, context_token, self_node, columns);
+			std::cout<<"distributePartitions createColumnDataMessage"<<std::endl;
 			Client::send(destination_node, *message);
+			std::cout<<"distributePartitions send"<<std::endl;
 		}));
 	}
 	for(size_t i = 0; i < threads.size(); i++) {
