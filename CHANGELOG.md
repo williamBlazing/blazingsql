@@ -34,3 +34,5 @@
 #728 Add replace_calcite_regex function to the join condition
 #721 Handling multi-partition output
 #750 Each table scan now has its own data loader
+#740 Normalizing types for UNION ALL
+#744 Fix unit tests
