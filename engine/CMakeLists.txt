@@ -177,7 +177,6 @@ include(CTest)
 
 # NOTE Do not change the inclusion order
 include(ConfigureAWSSDK)
-include(ConfigureGoogleCloudCPP)
 
 find_package(Threads)
 find_package(PythonLibs)

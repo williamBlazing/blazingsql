@@ -22,9 +22,10 @@ requirements:
     build:
         - gtest
         - gmock
-        - arrow-cpp=0.17.1
+        - arrow-cpp=0.15.0
         - cmake
         - bsql-toolchain {{ minor_version }}.*
+        - google-cloud-cpp
         - cppzmq
         - cudatoolkit {{ cuda_version }}.*
         - librmm {{ minor_version }}.*
@@ -54,8 +55,9 @@ requirements:
         - maven
     run:
         - gtest
-        - arrow-cpp=0.17.1
+        - arrow-cpp=0.15.0
         - bsql-toolchain {{ minor_version }}.*
+        - google-cloud-cpp
         - cppzmq
         - cudatoolkit {{ cuda_version }}.*
         - librmm {{ minor_version }}.*
