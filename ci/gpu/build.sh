@@ -59,8 +59,8 @@ conda install --yes openjdk=8.0 maven cmake gtest gmock rapidjson cppzmq cython=
 echo "BlazingSQL deps installed"
 
 # install toolchain
-echo "conda install --yes bsql-toolchain=${MINOR_VERSION} bsql-toolchain-aws-cpp=${MINOR_VERSION} bsql-toolchain-gcp-cpp=${MINOR_VERSION} bsql-rapids-thirdparty=${MINOR_VERSION} curl=7.68.0"
-conda install --yes bsql-toolchain=${MINOR_VERSION} bsql-toolchain-aws-cpp=${MINOR_VERSION} bsql-toolchain-gcp-cpp=${MINOR_VERSION} bsql-rapids-thirdparty=${MINOR_VERSION} curl=7.68.0
+echo "conda install --yes bsql-toolchain=${MINOR_VERSION} bsql-toolchain-aws-cpp=${MINOR_VERSION} bsql-rapids-thirdparty=${MINOR_VERSION}"
+conda install --yes bsql-toolchain=${MINOR_VERSION} bsql-toolchain-aws-cpp=${MINOR_VERSION} bsql-rapids-thirdparty=${MINOR_VERSION}
 echo "BlazingSQL toolchain installed"
 
 # install cudf
