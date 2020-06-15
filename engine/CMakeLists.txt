@@ -285,8 +285,6 @@ target_link_libraries(blazingsql-engine
     blazingdb-transport
 
     cudf
-    NVCategory
-    NVStrings
     rmm
     zmq
     cudart

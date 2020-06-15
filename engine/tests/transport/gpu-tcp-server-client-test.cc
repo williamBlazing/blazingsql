@@ -13,7 +13,6 @@
 #include "communication/network/Server.h"
 #include <memory>
 #include <numeric>
-#include <nvstrings/NVCategory.h>
 
 #include <from_cudf/cpp_tests/utilities/base_fixture.hpp>
 #include <cudf/column/column_factories.hpp>

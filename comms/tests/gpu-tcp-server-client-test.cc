@@ -10,7 +10,6 @@
 
 #include <gmock/gmock.h>
 #include <gtest/gtest.h>
-#include <nvstrings/NVCategory.h>
 #include <boost/crc.hpp>
 #include <memory>
 #include <numeric>
