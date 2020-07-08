@@ -855,6 +855,10 @@ class BlazingContext(object):
                                     BLAZING_LOGGING_DIRECTORY : A folder path to place all logging files. The path can be relative or absolute.
                                             NOTE: This parameter only works when used in the BlazingContext
                                             default: 'blazing_log'
+                                    BLAZING_LOGGING_FLUSH_LEVEL : The logging level at which the logger will flush to the log files. It also will automatically 
+                                            flush at 1 sec intervals. Options are: 'trace', 'debug', 'info', 'warning', 'error', 'critical'
+                                            NOTE: This parameter only works when used in the BlazingContext
+                                            default: 'warning'
                                     BLAZING_CACHE_DIRECTORY : A folder path to place all orc files when start caching on Disk. The path can be relative or absolute.
                                             NOTE: This parameter only works when used in the BlazingContext
                                             default: '/tmp/'

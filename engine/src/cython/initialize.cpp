@@ -76,9 +76,6 @@ void create_logger(std::string fileName, std::string loggingName, int ralId, boo
 	auto logger = std::make_shared<spdlog::async_logger>(loggingName, sink_list, spdlog::thread_pool(), spdlog::async_overflow_policy::block);
 	logger->set_level(spdlog::level::trace);
 	spdlog::register_logger(logger);
-
-	spdlog::flush_on(spdlog::level::warn);
-	spdlog::flush_every(std::chrono::seconds(1));
 }
 
 void initialize(int ralId,
@@ -134,9 +131,6 @@ void initialize(int ralId,
 
 	spdlog::init_thread_pool(8192, 1);
 
-	spdlog::flush_on(spdlog::level::warn);
-	spdlog::flush_every(std::chrono::seconds(1));
-
 	std::string logging_dir = "blazing_log";
 	auto config_it = config_options.find("BLAZING_LOGGING_DIRECTORY");
 	if (config_it != config_options.end()){
@@ -150,7 +144,6 @@ void initialize(int ralId,
 		logging_directory_missing = true;
 		logging_dir = "";		
 	}
-
 
 	std::string batchLoggerFileName = logging_dir + "/RAL." + std::to_string(ralId) + ".log";
 	create_logger(batchLoggerFileName, "batch_logger", ralId, false);
@@ -174,6 +167,28 @@ void initialize(int ralId,
 	std::string cacheEventsFileName = logging_dir + "/bsql_cache_events." + std::to_string(ralId) + ".log";
 	bool existsCacheEventsFileName = std::ifstream(cacheEventsFileName).good();
 	create_logger(cacheEventsFileName, "cache_events_logger", ralId);
+
+
+	std::string logging_flush_level = "warn";
+	auto flush_config_it = config_options.find("BLAZING_LOGGING_FLUSH_LEVEL");
+	if (flush_config_it != config_options.end()){
+		logging_flush_level = config_options["BLAZING_LOGGING_FLUSH_LEVEL"];
+	}
+	if (logging_flush_level == "trace"){
+		spdlog::flush_on(spdlog::level::trace);
+	} else if (logging_flush_level == "debug"){
+		spdlog::flush_on(spdlog::level::debug);
+	} else if (logging_flush_level == "info"){
+		spdlog::flush_on(spdlog::level::info);
+	} else if (logging_flush_level == "warning"){
+		spdlog::flush_on(spdlog::level::warn);
+	} else if (logging_flush_level == "error"){
+		spdlog::flush_on(spdlog::level::err);
+	} else if (logging_flush_level == "critical"){
+		spdlog::flush_on(spdlog::level::critical);
+	}
+	spdlog::flush_every(std::chrono::seconds(1));
+	
 
 	//Logger Headers
 	if(!existsQueriesFileName) {
