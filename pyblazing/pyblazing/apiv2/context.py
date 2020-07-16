@@ -2305,14 +2305,11 @@ class BlazingContext(object):
                 # .sql expects to return
                 # an array of dask_futures or a df, this makes it consistent
                 worker = self.nodes[self.single_gpu_idx]["worker"]
-                self.single_gpu_idx = self.single_gpu_idx + 1
-                if self.single_gpu_idx >= len(self.nodes):
-                    self.single_gpu_idx = 0
                 dask_futures = [
                     self.dask_client.submit(
                         collectPartitionsRunQuery,
                         masterIndex,
-                        [self.nodes[0],],
+                        [self.nodes[self.single_gpu_idx],],
                         nodeTableList[0],
                         table_scans,
                         fileTypes,
@@ -2321,8 +2318,12 @@ class BlazingContext(object):
                         accessToken,
                         query_config_options,
                         single_gpu=True,
+                        workers = [worker],
                     )
                 ]
+                self.single_gpu_idx = self.single_gpu_idx + 1
+                if self.single_gpu_idx >= len(self.nodes):
+                    self.single_gpu_idx = 0
             else:
                 dask_futures = []
                 i = 0
