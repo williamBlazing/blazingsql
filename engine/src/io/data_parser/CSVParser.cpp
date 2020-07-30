@@ -9,6 +9,7 @@
 #include <arrow/buffer.h>
 #include <arrow/io/memory.h>
 #include <numeric>
+#include <cudf/io/datasource.hpp>
 
 #include <blazingdb/io/Library/Logging/Logger.h>
 
@@ -38,7 +39,8 @@ cudf_io::table_with_metadata read_csv_arg_arrow(cudf_io::read_csv_args new_csv_a
 		new_csv_args.skipfooter = 0;
 	}
 
-	new_csv_args.source = cudf_io::source_info(arrow_file_handle);
+	std::unique_ptr<cudf::io::datasource> source = cudf::io::datasource::create(arrow_file_handle);	
+	new_csv_args.source = cudf_io::source_info(source.get());
 
 	if(new_csv_args.nrows != -1)
 		new_csv_args.skipfooter = 0;
