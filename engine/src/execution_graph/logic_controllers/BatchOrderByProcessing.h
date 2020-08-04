@@ -35,28 +35,17 @@ public:
 		CodeTimer timer;
 
 		BatchSequence input_partitionPlan(this->input_.get_cache("input_b"), this);
-		auto partitionPlan = std::move(input_partitionPlan.next());
+		partitionPlan = std::move(input_partitionPlan.next());
 
 		bool ordered = false;
-		BatchSequence input(this->input_.get_cache("input_a"), this, ordered);
+		BatchSequenceBypass input(this->input_.get_cache("input_a"), this);
 		int batch_count = 0;
 		while (input.wait_for_next()) {
 			try {
-				auto batch = input.next();
-				auto partitions = ral::operators::partition_table(partitionPlan->toBlazingTableView(), batch->toBlazingTableView(), this->expression);
+				std::vector<std::unique_ptr<ral::cache::CacheData>> batches;
+				batches.push_back(input.next());
 
-				// std::cout<<">>>>>>>>>>>>>>> PARTITIONS START"<< std::endl;
-				// for(auto& partition : partitions)
-				// 	ral::utilities::print_blazing_table_view(ral::frame::BlazingTableView(partition, batch->names()));
-				// std::cout<<">>>>>>>>>>>>>>> PARTITIONS START"<< std::endl;
-
-				for (auto i = 0; i < partitions.size(); i++) {
-					std::string cache_id = "output_" + std::to_string(i);
-					this->add_to_output_cache(
-						std::make_unique<ral::frame::BlazingTable>(std::make_unique<cudf::table>(partitions[i]), batch->names()),
-						cache_id
-						);
-				}
+				kstatus status = run_batch(std::move(batches), batch_count);
 				batch_count++;
 			} catch(const std::exception& e) {
 				// TODO add retry here
@@ -81,7 +70,29 @@ public:
 		return kstatus::proceed;
 	}
 
+	virtual kstatus run_batch(std::vector<std::unique_ptr<ral::cache::CacheData>> batches, int batch_count) {
+
+		// run_batch for ComputeAggregateKernel only really expects one CacheData in batches
+        for (int cache_ind = 0; cache_ind < batches.size(); cache_ind++){
+
+			auto batch = batches[cache_ind]->decache();
+
+			auto partitions = ral::operators::partition_table(partitionPlan->toBlazingTableView(), batch->toBlazingTableView(), this->expression);
+
+			for (auto i = 0; i < partitions.size(); i++) {
+				std::string cache_id = "output_" + std::to_string(i);
+				this->add_to_output_cache(
+					std::make_unique<ral::frame::BlazingTable>(std::make_unique<cudf::table>(partitions[i]), batch->names()),
+					cache_id
+					);
+			}
+		}
+
+		return kstatus::proceed;
+	}
+
 private:
+	std::unique_ptr<ral::frame::BlazingTable> partitionPlan;
 
 };
 
