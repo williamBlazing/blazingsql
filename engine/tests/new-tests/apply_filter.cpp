@@ -147,6 +147,79 @@ TYPED_TEST(ApplyFilter, withAndWithOutNull)
     cudf::test::expect_tables_equal(expect_cudf_table_view, table_out->view());
 }
 
+TYPED_TEST(ApplyFilter, Bigger)
+{
+    int32_t num_rows = 500000000;
+    // TypeParam is the type defined by TYPED_TEST_CASE for a particular test run. Here we are giving TypeParam an alias T
+
+    std::cout<<"0"<<std::endl;
+    
+    std::vector<int32_t> data(num_rows);
+    std::iota(data.begin(), data.end(), 0);
+    std::vector<bool> valids(num_rows, true);
+
+    std::cout<<"1"<<std::endl;
+
+    // Here we are creating the input data
+    cudf::test::fixed_width_column_wrapper<int32_t> col1(data.begin(), data.end(), valids.begin());
+
+    std::cout<<"2"<<std::endl;
+    
+    // Then we create a CudfTableView from the column wrappers we created
+    CudfTableView cudf_table_in_view ({col1});
+    // Then using a vector of names and the CudfTableView we are able to create a BlazingTableView
+    std::vector<std::string> names({"A"});
+    BlazingTableView table_in(cudf_table_in_view, names);    
+
+    std::cout<<"3"<<std::endl;
+
+    // Here we are creating the other input, using a column wrapper and using that to create a column_view
+    std::vector<bool> filter(num_rows, true);
+    std::vector<int32_t> expected;
+    int count = 2;
+    int next = num_rows/3;
+    for (int i = 0; i < num_rows; i++){
+        if (i >= next + count){
+            filter[i] = false;
+            next = i;
+            count++;
+        } else {
+            expected.push_back(data[i]);
+        }        
+    }
+
+    cudf::test::fixed_width_column_wrapper<bool> bool_filter(filter.begin(), filter.end(),  valids.begin());
+
+    std::cout<<"4"<<std::endl;
+
+    cudf::column_view bool_filter_col(bool_filter);
+
+
+    // this is the function under test
+    std::unique_ptr<BlazingTable> table_out = applyBooleanFilter(
+        table_in,bool_filter_col);
+
+        std::cout<<"5"<<std::endl;
+
+    auto in = table_out->view().column(0);
+    if (in.nullable()){
+      std::cout<<"eval.nullable() true in.size(): "<<in.size()<<" in.null_count(): "<<in.null_count()<<std::endl;
+    } else {
+      std::cout<<"eval.nullable() false in.size(): "<<in.size()<<" in.null_count(): "<<in.null_count()<<std::endl;
+    }
+
+    std::cout<<"6"<<std::endl;
+
+    // Here we are creating the expected output
+    cudf::test::fixed_width_column_wrapper<int32_t> expect_col1(expected.begin(), expected.end(), valids.begin());
+    CudfTableView expect_cudf_table_view ({expect_col1});
+
+    std::cout<<"7"<<std::endl;
+
+    // Here we are validating the output
+    cudf::test::expect_tables_equivalent(expect_cudf_table_view, table_out->view());
+}
+
 
 using namespace cudf::datetime;
 using namespace simt::std::chrono;
