@@ -275,7 +275,7 @@ public:
       throw std::runtime_error("bind server");
     }
 
-    ret = listen(lsock_, 0);
+    ret = listen(lsock_, SOMAXCONN);
     if (ret < 0) {
       std::cout << "listen server" << std::endl;
       close(lsock_);
