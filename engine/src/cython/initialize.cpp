@@ -787,9 +787,11 @@ std::pair<std::shared_ptr<CacheMachine>,std::shared_ptr<CacheMachine> > initiali
 				nodes_info_map.emplace(worker_info.worker_id, comm::node(ralId, worker_info.worker_id, ucp_ep, self_worker));
 			}
 
-			comm::ucx_message_listener::initialize_message_listener(
-				ucp_context, self_worker,nodes_info_map,20);
-			comm::ucx_message_listener::get_instance()->poll_begin_message_tag(true);
+			if (!comm::ucx_message_listener::get_instance().isInitialized()){
+				comm::ucx_message_listener::get_instance().initialize_message_listener(
+					ucp_context, self_worker,nodes_info_map,20);
+				comm::ucx_message_listener::get_instance().poll_begin_message_tag(true);
+			}
 
 		}else{
 
@@ -802,8 +804,10 @@ std::pair<std::shared_ptr<CacheMachine>,std::shared_ptr<CacheMachine> > initiali
 				nodes_info_map.emplace(worker_info.worker_id, comm::node(ralId, worker_info.worker_id, worker_info.ip, worker_info.port));
 			}
 
-			comm::tcp_message_listener::initialize_message_listener(nodes_info_map,ralCommunicationPort,20);
-			comm::tcp_message_listener::get_instance()->start_polling();
+			if (!comm::tcp_message_listener::get_instance().isInitialized()){
+				comm::tcp_message_listener::get_instance().initialize_message_listener(nodes_info_map,ralCommunicationPort,20);
+				comm::tcp_message_listener::get_instance().start_polling();
+			}
 		}
 		comm::message_sender::initialize_instance(output_input_caches.first,
 			nodes_info_map,

@@ -21,8 +21,7 @@ std::map<std::string, comm::node> message_listener::get_node_map(){
 void recv_frame_callback_c(void * request, ucs_status_t status,
 							ucp_tag_recv_info_t *info) {
 	try{
-		auto message_listener = ucx_message_listener::get_instance();
-		message_listener->increment_frame_receiver(
+		ucx_message_listener::get_instance().increment_frame_receiver(
 			info->sender_tag & message_tag_mask); //and with message_tag_mask to set frame_id to 00 to match tag
 		ucp_request_release(request);
 	}
@@ -59,8 +58,7 @@ void poll_for_frames(std::shared_ptr<message_receiver> receiver,
     } while (status == UCS_INPROGRESS);
 
     if (status == UCS_OK) {
-      auto message_listener = ucx_message_listener::get_instance();
-      message_listener->increment_frame_receiver(tag & message_tag_mask);
+      ucx_message_listener::get_instance().increment_frame_receiver(tag & message_tag_mask);
     } else {
       // TODO: decide how to do cleanup i think we just throw an
       // initialization exception
@@ -75,13 +73,11 @@ void poll_for_frames(std::shared_ptr<message_receiver> receiver,
 
 void recv_begin_callback_c(ucp_tag_recv_info_t *info, size_t request_size) {
 
-	auto message_listener = ucx_message_listener::get_instance();
-
-	auto fwd = message_listener->get_pool().push([&message_listener, info, request_size](int thread_id) {
+	auto fwd = ucx_message_listener::get_instance().get_pool().push([info, request_size](int thread_id) {
 		auto buffer = tag_to_begin_buffer_and_info.at(info->sender_tag).first;
 
-		auto receiver = std::make_shared<message_receiver>(message_listener->get_node_map(), buffer);
-		message_listener->add_receiver(info->sender_tag, receiver);
+		auto receiver = std::make_shared<message_receiver>(ucx_message_listener::get_instance().get_node_map(), buffer);
+		ucx_message_listener::get_instance().add_receiver(info->sender_tag, receiver);
 		//TODO: if its a specific cache get that cache adn put it here else put the general iput cache from the graph
 		auto node = receiver->get_sender_node();
 
@@ -108,7 +104,7 @@ void recv_begin_callback_c(ucp_tag_recv_info_t *info, size_t request_size) {
 			throw std::runtime_error("Was not able to send transmission ack");
 		}
 
-		poll_for_frames(receiver, info->sender_tag, message_listener->get_worker(), request_size);
+		poll_for_frames(receiver, info->sender_tag, ucx_message_listener::get_instance().get_worker(), request_size);
 	});
 	try{
 		fwd.get();
@@ -269,35 +265,29 @@ ucp_worker_h ucx_message_listener::get_worker(){
 void ucx_message_listener::increment_frame_receiver(ucp_tag_t tag){
 	tag_to_receiver[tag]->confirm_transmission();
 }
-ucx_message_listener * ucx_message_listener::instance = nullptr;
-tcp_message_listener * tcp_message_listener::instance = nullptr;
-
-ucx_message_listener::ucx_message_listener(ucp_context_h context, ucp_worker_h worker, const std::map<std::string, comm::node>& nodes, int num_threads) :
-	message_listener(nodes, num_threads), ucp_worker{worker}
-{
-  ucp_context_attr_t attr;
-  attr.field_mask = UCP_ATTR_FIELD_REQUEST_SIZE;
-  ucs_status_t status = ucp_context_query(context, &attr);
-	if (status != UCS_OK)	{
-		throw std::runtime_error("Error calling ucp_context_query");
-	}
-
-	_request_size = attr.request_size;
-}
-
-tcp_message_listener::tcp_message_listener(const std::map<std::string, comm::node>& nodes,int port, int num_threads) : _port{port} , message_listener{nodes,num_threads}{
-
-}
 
 void ucx_message_listener::initialize_message_listener(ucp_context_h context, ucp_worker_h worker, const std::map<std::string, comm::node>& nodes, int num_threads){
-	if(instance == NULL) {
-		instance = new ucx_message_listener(context, worker, nodes, num_threads);
+	if(!is_initialized) {
+		_nodes_info_map = nodes;
+		pool.resize(num_threads);
+		ucp_worker = worker;
+		ucp_context_attr_t attr;
+		attr.field_mask = UCP_ATTR_FIELD_REQUEST_SIZE;
+		ucs_status_t status = ucp_context_query(context, &attr);
+		if(status != UCS_OK) {
+			throw std::runtime_error("Error calling ucp_context_query");
+		}
+
+		_request_size = attr.request_size;
+		is_initialized = true;
 	}
 }
 
 void tcp_message_listener::initialize_message_listener(const std::map<std::string, comm::node>& nodes, int port, int num_threads){
-	if(instance == NULL){
-		instance = new tcp_message_listener(nodes,port,num_threads);
+	if(!is_initialized) {
+		_nodes_info_map = nodes;
+		pool.resize(num_threads);
+		is_initialized = true;
 	}
 }
 
@@ -305,18 +295,5 @@ void ucx_message_listener::start_polling(){
    poll_begin_message_tag(false);
 }
 
-ucx_message_listener * ucx_message_listener::get_instance() {
-	if(instance == NULL) {
-		throw::std::exception();
-	}
-	return instance;
-}
-
-tcp_message_listener * tcp_message_listener::get_instance() {
-	if(instance == NULL) {
-		throw::std::exception();
-	}
-	return instance;
-}
 
 }//namespace comm
