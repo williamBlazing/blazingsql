@@ -193,11 +193,12 @@ public:
                                     increment_node_count(self_node.id());
                                 }
                             }
-
+                            std::cout<<"DistributeAggregateKernel sending to master"<<std::endl;
                             send_message(std::move(batch),
                                 "true", //specific_cache
                                 "", //cache_id
                                 this->context->getMasterNode().id()); //target_id
+                            std::cout<<"DistributeAggregateKernel sent to master"<<std::endl;
                         }
                     } else {
                         CudfTableView batch_view = batch->view();
@@ -222,11 +223,13 @@ public:
                             partitions.back()->ensureOwnership();
                         }
 
+                        std::cout<<"DistributeAggregateKernel scattering"<<std::endl;
                         scatter(std::move(partitions),
                             this->output_.get_cache().get(),
                             "", //message_id_prefix
                             "" //cache_id
                         );
+                        std::cout<<"DistributeAggregateKernel scattered"<<std::endl;
                     }
                     batch_count++;
                 } catch(const std::exception& e) {
@@ -241,16 +244,22 @@ public:
                 }
             }
 
+            std::cout<<"DistributeAggregateKernel send_total_partition_counts"<<std::endl;
             send_total_partition_counts(
                 "", //message_prefix
                 "" //cache_id
             );
+            std::cout<<"DistributeAggregateKernel send_total_partition_counts done"<<std::endl;
         });
         //TODO: remove producer thread we don't really need it anymore
         producer_thread.join();
 
+        std::cout<<"DistributeAggregateKernel get_total_partition_counts"<<std::endl;
         int total_count = get_total_partition_counts();
+        std::cout<<"DistributeAggregateKernel get_total_partition_counts done"<<std::endl;
+
         this->output_cache()->wait_for_count(total_count);
+        std::cout<<"DistributeAggregateKernel wait_for_count done"<<std::endl;
 
         logger->debug("{query_id}|{step}|{substep}|{info}|{duration}|kernel_id|{kernel_id}||",
                     "query_id"_a=context->getContextToken(),
