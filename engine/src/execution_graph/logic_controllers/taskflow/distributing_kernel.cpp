@@ -135,23 +135,18 @@ void distributing_kernel::broadcast(std::unique_ptr<ral::frame::BlazingTable> ta
         }
     }
 
-    for(std::size_t i = 0; i < nodes.size(); ++i) {
-         if (nodes[i] == node) {
-            bool added = output->addToCache(std::move(table->toBlazingTableView().clone()), message_id_prefix);
-            if (added) {
-                node_count[message_tracker_idx][node.id()]++;
-            }
-        } else {
-            send_message(std::move(table),
-                "true", //specific_cache
-                cache_id, //cache_id
-                worker_ids_metadata, //target_id
-                "", //total_rows
-                "", //message_id_prefix
-                true //always_add
-            );
-        } 
+    bool added = output->addToCache(std::move(table->toBlazingTableView().clone()), message_id_prefix);
+    if (added) {
+        node_count[message_tracker_idx][node.id()]++;
     }
+    send_message(std::move(table),
+        "true", //specific_cache
+        cache_id, //cache_id
+        worker_ids_metadata, //target_id
+        "", //total_rows
+        "", //message_id_prefix
+        true //always_add
+    );    
 }
 
 void distributing_kernel::scatter(std::vector<std::unique_ptr<ral::frame::BlazingTable>> partitions,
