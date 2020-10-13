@@ -179,15 +179,19 @@ public:
                     auto& self_node = ral::communication::CommunicationData::getInstance().getSelfNode();
                     if (group_column_indices.size() == 0) {
                         if(this->context->isMasterNode(self_node)) {
-                            this->output_.get_cache()->addToCache(std::move(batch),"",true);
-                            increment_node_count(self_node.id());
+                            bool added = this->output_.get_cache()->addToCache(std::move(batch),"",true);
+                            if (added){
+                                increment_node_count(self_node.id());
+                            }
                         } else {
                             if (!set_empty_part_for_non_master_node){ // we want to keep in the non-master nodes something, so that the cache is not empty
                                 std::unique_ptr<ral::frame::BlazingTable> empty =
                                     ral::utilities::create_empty_table(batch->toBlazingTableView());
                                 bool added = this->add_to_output_cache(std::move(empty));
                                 set_empty_part_for_non_master_node = true;
-                                increment_node_count(self_node.id());
+                                if (added) {
+                                    increment_node_count(self_node.id());
+                                }
                             }
 
                             send_message(std::move(batch),
@@ -212,12 +216,13 @@ public:
                             }
                         }
 
-                        std::vector<ral::frame::BlazingTableView> partitions;
+                        std::vector<std::unique_ptr<ral::frame::BlazingTable>> partitions;
                         for(auto partition : partitioned) {
-                            partitions.push_back(ral::frame::BlazingTableView(partition, batch->names()));
+                            partitions.push_back(std::make_unique<ral::frame::BlazingTable>(partition, batch->names()));
+                            partitions.back()->ensureOwnership();
                         }
 
-                        scatter(partitions,
+                        scatter(std::move(partitions),
                             this->output_.get_cache().get(),
                             "", //message_id_prefix
                             "" //cache_id

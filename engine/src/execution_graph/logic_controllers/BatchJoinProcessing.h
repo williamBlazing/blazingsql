@@ -521,12 +521,13 @@ public:
 					}
 				}
 
-				std::vector<ral::frame::BlazingTableView> partitions;
+				std::vector<std::unique_ptr<ral::frame::BlazingTable>> partitions;
 				for(auto partition : partitioned) {
-					partitions.push_back(ral::frame::BlazingTableView(partition, batch->names()));
+					partitions.push_back(std::make_unique<ral::frame::BlazingTable>(partition, batch->names()));
+					partitions.back()->ensureOwnership();
 				}
 
-				scatter(partitions,
+				scatter(std::move(partitions),
 					this->output_.get_cache().get(),
 					"", //message_id_prefix
 					"", //cache_id
@@ -828,7 +829,7 @@ public:
 			while (!done) {
 				try {
 					if(small_table_batch != nullptr ) {
-						broadcast(small_table_batch->toBlazingTableView(),
+						broadcast(std::move(small_table_batch),
 							this->output_.get_cache(small_output_cache_name).get(),
 							"", //message_id_prefix
 							small_output_cache_name, //cache_id

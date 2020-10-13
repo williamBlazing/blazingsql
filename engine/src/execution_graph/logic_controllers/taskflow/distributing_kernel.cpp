@@ -57,17 +57,18 @@ void distributing_kernel::send_message(std::unique_ptr<ral::frame::BlazingTable>
 
     std::shared_ptr<ral::cache::CacheMachine> output_cache = query_graph->get_output_message_cache();
 
+    bool added;
     if(table==nullptr) {
-        output_cache->addCacheData(std::make_unique<ral::cache::GPUCacheDataMetaData>(ral::utilities::create_empty_table({}, {}), metadata), "", always_add);
+        added = output_cache->addCacheData(std::make_unique<ral::cache::GPUCacheDataMetaData>(ral::utilities::create_empty_table({}, {}), metadata), "", always_add);
     } else {
-        output_cache->addCacheData(std::unique_ptr<ral::cache::GPUCacheData>(new ral::cache::GPUCacheDataMetaData(std::move(table), metadata)), "", always_add);
+        added = output_cache->addCacheData(std::unique_ptr<ral::cache::GPUCacheData>(new ral::cache::GPUCacheDataMetaData(std::move(table), metadata)), "", always_add);
     }
 
     if(wait_for) {
         messages_to_wait_for[message_tracker_idx].push_back(message_id_prefix + MESSAGE_ID_CONTENT);
     }
 
-    if(specific_cache != "false") {
+    if(added && specific_cache != "false") {
         node_count[message_tracker_idx][target_id]++;
     }
 }
@@ -106,7 +107,7 @@ void distributing_kernel::send_total_partition_counts(
     }
 }
 
-void distributing_kernel::broadcast(ral::frame::BlazingTableView table_view,
+void distributing_kernel::broadcast(std::unique_ptr<ral::frame::BlazingTable> table,
         ral::cache::CacheMachine* output,
         std::string message_id_prefix,
         std::string cache_id,
@@ -127,7 +128,7 @@ void distributing_kernel::broadcast(ral::frame::BlazingTableView table_view,
 
     for(std::size_t i = 0; i < nodes.size(); ++i) {
         if (nodes[i] != node) {
-            send_message(std::move(table_view.clone()),
+            send_message(std::move(table),
                 "true", //specific_cache
                 cache_id, //cache_id
                 worker_ids_metadata, //target_id
@@ -139,7 +140,7 @@ void distributing_kernel::broadcast(ral::frame::BlazingTableView table_view,
     }
 }
 
-void distributing_kernel::scatter(std::vector<ral::frame::BlazingTableView> partitions,
+void distributing_kernel::scatter(std::vector<std::unique_ptr<ral::frame::BlazingTable>> partitions,
         ral::cache::CacheMachine* output,
         std::string message_id_prefix,
         std::string cache_id,
@@ -152,16 +153,18 @@ void distributing_kernel::scatter(std::vector<ral::frame::BlazingTableView> part
             // hash_partition followed by split does not create a partition that we can own, so we need to clone it.
             // if we dont clone it, hashed_data will go out of scope before we get to use the partition
             // also we need a BlazingTable to put into the cache, we cant cache views.
-            output->addToCache(std::move(partitions[i].clone()), message_id_prefix, true);
-            node_count[message_tracker_idx][node.id()]++;
+            bool added = output->addToCache(std::move(partitions[i]), message_id_prefix);
+            if (added) {
+                node_count[message_tracker_idx][node.id()]++;
+            }
         } else {
-            send_message(std::move(partitions[i].clone()),
+            send_message(std::move(partitions[i]),
                 "true", //specific_cache
                 cache_id, //cache_id
                 nodes[i].id(), //target_id
                 "", //total_rows
                 message_id_prefix, //message_id_prefix
-                true, //always_add
+                false, //always_add
                 false, //wait_for
                 message_tracker_idx //message_tracker_idx
             );
@@ -203,8 +206,10 @@ void distributing_kernel::scatterNodeColumnViews(std::vector<ral::distribution::
         auto & partition = partitions[i];
         if(partition.first == node) {
             std::string cache_id = "output_" + std::to_string(part_ids[i]);
-            output->addToCache(std::move(partition.second.clone()), cache_id, true);
-            node_count[message_tracker_idx][node.id()]++;
+            bool added = output->addToCache(std::move(partition.second.clone()), cache_id, true);
+            if (added) {
+                node_count[message_tracker_idx][node.id()]++;
+            }
         }
     }
 }
