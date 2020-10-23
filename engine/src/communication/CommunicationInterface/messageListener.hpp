@@ -43,6 +43,7 @@ private:
     tcp_message_listener(const std::map<std::string, comm::node>& nodes, int port, int num_threads);
     int _port;
     static tcp_message_listener * instance;
+    int num_threads;
 };
 
 
