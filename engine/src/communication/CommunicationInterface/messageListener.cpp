@@ -251,7 +251,7 @@ void tcp_message_listener::start_polling(){
 				cudaStreamDestroy(stream);
 
 				accept_lock.lock();
-				connection_fd = accept(socket_fd, (struct sockaddr *) &client_address, &len);
+				connection_fd = accept(socket_fd, (struct sockaddr *) 0, (socklen_t *) 0);
 				accept_lock.unlock();
 			}
 		});
