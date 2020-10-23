@@ -156,7 +156,7 @@ void tcp_message_listener::start_polling(){
 	std::mutex accept_lock;
 	std::vector<std::thread> listener_threads;
 	for(int i = 0; i < num_threads; i++) {
-		auto thread = std::thread([this, socket_fd, &accept_lock] {
+		listener_threads.push_back(std::thread([this, socket_fd, &accept_lock] {
 			int connection_fd;
 
 			accept_lock.lock();
@@ -254,8 +254,7 @@ void tcp_message_listener::start_polling(){
 				connection_fd = accept(socket_fd, (struct sockaddr *) 0, (socklen_t *) 0);
 				accept_lock.unlock();
 			}
-		});
-		listener_threads.push_back(std::move(thread));
+		}));
 		listener_threads.back().detach();
 	}	
   }
