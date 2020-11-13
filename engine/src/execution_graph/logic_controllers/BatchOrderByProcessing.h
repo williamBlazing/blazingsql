@@ -140,21 +140,18 @@ public:
 				total_table_rows.push_back(local_total_num_rows);
 				total_avg_bytes_per_row.push_back(avg_bytes_per_row);
 
-				// let's recompute the avg_bytes_per_row if node master does not have data
-				if (avg_bytes_per_row == 1) {
-					std::size_t new_avg_bytes_per_row = 0;
-					int count_nodes_with_data = 0;
-					for(std::size_t i = 0; i < nodes.size(); ++i) {
-						if (total_avg_bytes_per_row[i] > 1) {
-							new_avg_bytes_per_row += total_avg_bytes_per_row[i];
-							count_nodes_with_data += 1;
-						}
-					}
-					avg_bytes_per_row = new_avg_bytes_per_row / count_nodes_with_data;
+				// let's recompute the `avg_bytes_per_row` using info from all the other nodes
+				size_t total_bytes = 0; 
+				size_t total_rows = 0;
+				for(std::size_t i = 0; i < nodes.size(); ++i) {
+					total_bytes += total_avg_bytes_per_row[i] * total_table_rows[i];
+					total_rows += total_table_rows[i];
 				}
+				// just in case there is no data
+				size_t final_avg_bytes_per_row = total_rows <= 0 ? 1 : total_bytes / total_rows;
 
 				std::size_t totalNumRows = std::accumulate(total_table_rows.begin(), total_table_rows.end(), std::size_t(0));
-				std::unique_ptr<ral::frame::BlazingTable> partitionPlan = ral::operators::generate_partition_plan(samples, totalNumRows, avg_bytes_per_row, this->expression, this->context.get());
+				std::unique_ptr<ral::frame::BlazingTable> partitionPlan = ral::operators::generate_partition_plan(samples, totalNumRows, final_avg_bytes_per_row, this->expression, this->context.get());
 
 				broadcast(std::move(partitionPlan),
 					this->output_.get_cache("output_b").get(),
