@@ -2,10 +2,7 @@
 #include <sys/stat.h>
 #include <random>
 #include <utilities/CommonOperations.h>
-#include <utilities/DebuggingUtils.h>
 #include <cudf/io/orc.hpp>
-#include "communication/CommunicationData.h"
-#include <stdio.h>
 
 using namespace std::chrono_literals;
 namespace ral {
@@ -73,11 +70,11 @@ std::unique_ptr<GPUCacheDataMetaData> cast_cache_data_to_gpu_with_meta(std::uniq
 }
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
-CacheMachine::CacheMachine(std::shared_ptr<Context> context): ctx(context), cache_id(CacheMachine::cache_count)
+CacheMachine::CacheMachine(std::shared_ptr<Context> context, std::string cache_machine_name, bool log_timeout): ctx(context), cache_id(CacheMachine::cache_count), cache_machine_name(cache_machine_name)
 {
 	CacheMachine::cache_count++;
 
-	waitingCache = std::make_unique<WaitingQueue>();
+	waitingCache = std::make_unique<WaitingQueue>(cache_machine_name, 60000, log_timeout);
 	this->memory_resources.push_back( &blazing_device_memory_resource::getInstance() );
 	this->memory_resources.push_back( &blazing_host_memory_resource::getInstance() );
 	this->memory_resources.push_back( &blazing_disk_memory_resource::getInstance() );
@@ -135,7 +132,7 @@ uint64_t CacheMachine::get_num_rows_added(){
 	return num_rows_added.load();
 }
 
-bool CacheMachine::addHostFrameToCache(std::unique_ptr<ral::frame::BlazingHostTable> host_table, const std::string & message_id) {
+bool CacheMachine::addHostFrameToCache(std::unique_ptr<ral::frame::BlazingHostTable> host_table, std::string message_id) {
 
 	// we dont want to add empty tables to a cache, unless we have never added anything
 	if (!this->something_added || host_table->num_rows() > 0){
@@ -152,6 +149,11 @@ bool CacheMachine::addHostFrameToCache(std::unique_ptr<ral::frame::BlazingHostTa
 
 		num_rows_added += host_table->num_rows();
 		num_bytes_added += host_table->sizeInBytes();
+
+		if (message_id == ""){
+			message_id = this->cache_machine_name;
+		}
+
 		auto cache_data = std::make_unique<CPUCacheData>(std::move(host_table));
 		auto item =	std::make_unique<message>(std::move(cache_data), message_id);
 		this->waitingCache->put(std::move(item));
@@ -164,7 +166,7 @@ bool CacheMachine::addHostFrameToCache(std::unique_ptr<ral::frame::BlazingHostTa
 }
 
 void CacheMachine::put(size_t message_id, std::unique_ptr<ral::frame::BlazingTable> table) {
-	this->addToCache(std::move(table), std::to_string(message_id), true);
+	this->addToCache(std::move(table), this->cache_machine_name + "_" + std::to_string(message_id), true);
 }
 
 void CacheMachine::clear() {
@@ -188,13 +190,13 @@ void CacheMachine::put_all_cache_data( std::vector<std::unique_ptr<ral::cache::C
 	std::vector<std::unique_ptr<message > > wrapped_messages(messages.size());
 	int i = 0;
 	for(int i = 0; i < messages.size();i++){
-		wrapped_messages[i] = 
+		wrapped_messages[i] =
 			std::make_unique<message>(std::move(messages[i]), message_ids[i]);
 	}
 	this->waitingCache->put_all(std::move(wrapped_messages));
 }
 
-bool CacheMachine::addCacheData(std::unique_ptr<ral::cache::CacheData> cache_data, const std::string & message_id, bool always_add){
+bool CacheMachine::addCacheData(std::unique_ptr<ral::cache::CacheData> cache_data, std::string message_id, bool always_add){
 
 	// we dont want to add empty tables to a cache, unless we have never added anything
 	if ((!this->something_added || cache_data->num_rows() > 0) || always_add){
@@ -208,6 +210,10 @@ bool CacheMachine::addCacheData(std::unique_ptr<ral::cache::CacheData> cache_dat
 			cacheIndex = 1;
 		} else {
 			cacheIndex = 2;
+		}
+
+		if (message_id == ""){
+			message_id = this->cache_machine_name;
 		}
 
 		if(cacheIndex == 0) {
@@ -265,7 +271,7 @@ bool CacheMachine::addCacheData(std::unique_ptr<ral::cache::CacheData> cache_dat
 	return false;
 }
 
-bool CacheMachine::addToCache(std::unique_ptr<ral::frame::BlazingTable> table, const std::string & message_id, bool always_add) {
+bool CacheMachine::addToCache(std::unique_ptr<ral::frame::BlazingTable> table, std::string message_id, bool always_add) {
 	// we dont want to add empty tables to a cache, unless we have never added anything
 	if (!this->something_added || table->num_rows() > 0 || always_add){
 		for (auto col_ind = 0; col_ind < table->num_columns(); col_ind++){
@@ -275,11 +281,15 @@ bool CacheMachine::addToCache(std::unique_ptr<ral::frame::BlazingTable> table, c
 			}
 
 		}
+
+		if (message_id == ""){
+			message_id = this->cache_machine_name;
+		}
 		num_rows_added += table->num_rows();
 		num_bytes_added += table->sizeInBytes();
 		int cacheIndex = 0;
 		while(cacheIndex < memory_resources.size()) {
-			
+
 			auto memory_to_use = (this->memory_resources[cacheIndex]->get_memory_used() + table->sizeInBytes());
 
 			if( memory_to_use < this->memory_resources[cacheIndex]->get_memory_limit()) {
@@ -363,11 +373,21 @@ void CacheMachine::wait_until_finished() {
 
 
 std::unique_ptr<ral::frame::BlazingTable> CacheMachine::get_or_wait(size_t index) {
-	std::unique_ptr<message> message_data = waitingCache->get_or_wait(std::to_string(index));
-	if (message_data == nullptr) {
+	std::unique_ptr<message> message_data = waitingCache->get_or_wait(this->cache_machine_name + "_" + std::to_string(index));
+	if (message_data == nullptr) {		
 		return nullptr;
+	} 
+	if (logger != nullptr){
+		logger->trace("{query_id}|{step}|{substep}|{info}|{duration}|kernel_id|{kernel_id}|rows|{rows}",
+								"query_id"_a=(ctx ? std::to_string(ctx->getContextToken()) : ""),
+								"step"_a=(ctx ? std::to_string(ctx->getQueryStep()) : ""),
+								"substep"_a=(ctx ? std::to_string(ctx->getQuerySubstep()) : ""),
+								"info"_a="CacheMachine::get_or_wait pulling from cache ",
+								"duration"_a="",
+								"kernel_id"_a=message_data->get_message_id(),
+								"rows"_a=message_data->get_data().num_rows());
 	}
-
+	
 	std::unique_ptr<ral::frame::BlazingTable> output = message_data->get_data().decache();
 	return std::move(output);
 }
@@ -537,12 +557,12 @@ size_t CacheMachine::downgradeCacheData() {
 	return bytes_downgraded;
 }
 
-ConcatenatingCacheMachine::ConcatenatingCacheMachine(std::shared_ptr<Context> context)
-	: CacheMachine(context) {}
+ConcatenatingCacheMachine::ConcatenatingCacheMachine(std::shared_ptr<Context> context, std::string cache_machine_name)
+	: CacheMachine(context, cache_machine_name) {}
 
 ConcatenatingCacheMachine::ConcatenatingCacheMachine(std::shared_ptr<Context> context, 
-			std::size_t concat_cache_num_bytes, bool concat_all)
-	: CacheMachine(context), concat_cache_num_bytes(concat_cache_num_bytes), concat_all(concat_all) {
+			std::size_t concat_cache_num_bytes, bool concat_all, std::string cache_machine_name)
+	: CacheMachine(context, cache_machine_name), concat_cache_num_bytes(concat_cache_num_bytes), concat_all(concat_all) {
 		
 	}
 

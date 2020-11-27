@@ -369,33 +369,6 @@ def executeGraph(ctxToken):
     return query_partids, meta, worker.name
 
 
-def collectPartitionsPerformPartition(
-    masterIndex, nodes, ctxToken, input, partition_keys_mapping, df_schema, by, i
-):
-    import dask.distributed
-
-    worker = dask.distributed.get_worker()
-    worker_id = nodes[i]["worker"]
-
-    if worker_id in partition_keys_mapping:
-        partition_keys = partition_keys_mapping[worker_id]
-        if len(partition_keys) > 1:
-            node_inputs = []
-            for key in partition_keys:
-                node_inputs.append(worker.data[key])
-            # TODO, eventually we want the engine side of the
-            # partition function to handle the table in parts
-            node_input = cudf.concat(node_inputs)
-        elif len(partition_keys) == 1:
-            node_input = worker.data[partition_keys[0]]
-        else:
-            node_input = df_schema
-    else:
-        node_input = df_schema
-
-    return cio.performPartitionCaller(masterIndex, nodes, ctxToken, node_input, by)
-
-
 # returns a map of table names to the indices of the columns needed.
 # If there are more than one table scan for one table, it merged the
 # needed columns if the column list is empty, it means we want all columns
@@ -864,6 +837,7 @@ def kwargs_validation(kwargs, bc_api_str):
             "skiprows",
             "num_rows",
             "use_index",
+            "max_bytes_chunk_read",  # Used for reading CSV files in chunks
             "local_files",
         ]
         params_info = "https://docs.blazingdb.com/docs/create_table"
@@ -1160,6 +1134,7 @@ def load_config_options_from_env(user_config_options: dict):
         "LOGGING_MAX_SIZE_PER_FILE": 1073741824,  # 1 GB
         "TRANSPORT_BUFFER_BYTE_SIZE": 1048576,  # 10 MB in bytes
         "TRANSPORT_POOL_NUM_BUFFERS": 100,
+        "PROTOCOL": "TCP",
     }
 
     # key: option_name, value: default_value
@@ -1374,11 +1349,9 @@ class BlazingContext(object):
 
         logging_dir_path = "blazing_log"
         if "BLAZING_LOGGING_DIRECTORY".encode() in self.config_options:
-            print("found config")
             logging_dir_path = self.config_options[
                 "BLAZING_LOGGING_DIRECTORY".encode()
             ].decode()
-            print(logging_dir_path)
 
         cache_dir_path = "/tmp"  # default directory to store orc files
         if "BLAZING_CACHE_DIRECTORY".encode() in self.config_options:
@@ -1507,7 +1480,7 @@ class BlazingContext(object):
 
             ralPort, ralIp, log_path = initializeBlazing(
                 ralId=0,
-                worker_id="",
+                worker_id="self",
                 networkInterface="lo",
                 singleNode=True,
                 nodes=self.nodes,
@@ -1967,53 +1940,80 @@ class BlazingContext(object):
             kwargs.update(extra_kwargs)
             input = folder_list
             is_hive_input = True
-        elif user_partitions is not None:
-            if user_partitions_schema is None:
-                print(
-                    """ERROR: When using 'partitions' without a Hive cursor,
-                     you also need to set 'partitions_schema' which should be
-                     a list of tuples of the column name and column type of
-                     the form partitions_schema=
-                     [('col_nameA','int32','col_nameB','str')]"""
-                )
-                get_blazing_logger(is_dask=False).error(
-                    """ERROR: When using 'partitions' without a Hive cursor,
-                     you also need to set 'partitions_schema' which should be
-                     a list of tuples of the column name and column type of
-                     the form partitions_schema=
-                     [('col_nameA','int32','col_nameB','str')]"""
-                )
-                return
-
-            hive_schema = {}
+        else:
+            location = None
             if isinstance(input, str):
-                hive_schema["location"] = input
-            elif isinstance(input, list) and len(input) == 1:
-                hive_schema["location"] = input[0]
-            else:
-                print(
-                    """ERROR: When using 'partitions' without a Hive cursor,
-                     the input needs to be a path to the base folder
-                     of the partitioned data"""
-                )
-                get_blazing_logger(is_dask=False).error(
-                    """ERROR: When using 'partitions' without a Hive cursor,
-                     the input needs to be a path to the base folder
-                     of the partitioned data"""
-                )
-                return
-            partitions_users = getPartitionsFromUserPartitions(user_partitions)
-            hive_schema["partitions"] = partitions_users
-            input = getFolderListFromPartitions(
-                hive_schema["partitions"], hive_schema["location"]
-            )
+                location = input
+            elif (
+                isinstance(input, list)
+                and len(input) == 1
+                and isinstance(input[0], str)
+            ):
+                location = input[0]
 
-        if user_partitions_schema is not None:
-            extra_columns = []
-            for part_schema in user_partitions_schema:
-                extra_columns.append(
-                    (part_schema[0], convertTypeNameStrToCudfType(part_schema[1]))
+            if (
+                user_partitions is None
+                and user_partitions_schema is None
+                and location is not None
+            ):
+                folder_metadata = cio.inferFolderPartitionMetadataCaller(location)
+                if len(folder_metadata) > 0:
+                    user_partitions = {}
+                    user_partitions_schema = []
+                    for metadata in folder_metadata:
+                        user_partitions[metadata["name"]] = metadata["values"]
+                        user_partitions_schema.append(
+                            (metadata["name"], metadata["data_type"])
+                        )
+
+            if user_partitions is not None:
+                if user_partitions_schema is None:
+                    print(
+                        """ERROR: When using 'partitions' without a Hive cursor,
+                        you also need to set 'partitions_schema' which should be
+                        a list of tuples of the column name and column type of
+                        the form partitions_schema=
+                        [('col_nameA','int32','col_nameB','str')]"""
+                    )
+                    get_blazing_logger(is_dask=False).error(
+                        """ERROR: When using 'partitions' without a Hive cursor,
+                        you also need to set 'partitions_schema' which should be
+                        a list of tuples of the column name and column type of
+                        the form partitions_schema=
+                        [('col_nameA','int32','col_nameB','str')]"""
+                    )
+                    return
+
+                if location is None:
+                    print(
+                        """ERROR: When using 'partitions' without a Hive cursor,
+                        the input needs to be a path to the base folder
+                        of the partitioned data"""
+                    )
+                    get_blazing_logger(is_dask=False).error(
+                        """ERROR: When using 'partitions' without a Hive cursor,
+                        the input needs to be a path to the base folder
+                        of the partitioned data"""
+                    )
+                    return
+
+                hive_schema = {}
+                hive_schema["location"] = location
+                hive_schema["partitions"] = getPartitionsFromUserPartitions(
+                    user_partitions
                 )
+                input = getFolderListFromPartitions(
+                    hive_schema["partitions"], hive_schema["location"]
+                )
+
+                extra_columns = []
+                for part_schema in user_partitions_schema:
+                    cudf_type = (
+                        convertTypeNameStrToCudfType(part_schema[1])
+                        if isinstance(part_schema[1], str)
+                        else part_schema[1]
+                    )
+                    extra_columns.append((part_schema[0], cudf_type))
 
         if isinstance(input, str):
             input = [
@@ -2621,63 +2621,14 @@ class BlazingContext(object):
                     return current_table.getSlicesByWorker(len(self.nodes))
 
     """
-    Partition a dask_cudf DataFrame based on one or more columns.
-
-    Parameters
-    ----------
-
-    input : the dask_cudf.DataFrame you want to partition
-    by : a list of strings of the column names by which you want to partition.
-
-    Examples
-    --------
-
-    >>> bc = BlazingContext(dask_client=client)
-    >>> bc.create_table('product_reviews', "product_reviews/*.parquet")
-    >>> query_1= "SELECT pr_item_sk, pr_review_content, pr_review_sk
-        FROM product_reviews where pr_review_content IS NOT NULL"
-    >>> product_reviews_df = bc.sql(query_1)
-    >>> product_reviews_df = bc.partition(product_reviews_df,
-                                by=["pr_item_sk",
-                                    "pr_review_content",
-                                    "pr_review_sk"])
-    >>> sentences = product_reviews_df.map_partitions(
-                        create_sentences_from_reviews)
+    This function has been Deprecated. It is recommended to use ddf.shuffle(on=[colnames])
 
     """
 
     def partition(self, input, by=[]):
-        masterIndex = 0
-        ctxToken = random.randint(0, np.iinfo(np.int32).max)
-
-        if self.dask_client is None:
-            print("Not supported...")
-        else:
-            if not isinstance(input, dask_cudf.core.DataFrame):
-                print("Not supported...")
-            else:
-                partition_keys_mapping = getNodePartitionKeys(input, self.dask_client)
-                df_schema = input._meta
-
-                dask_futures = []
-                for i, node in enumerate(self.nodes):
-                    worker = node["worker"]
-                    dask_futures.append(
-                        self.dask_client.submit(
-                            collectPartitionsPerformPartition,
-                            masterIndex,
-                            self.nodes,
-                            ctxToken,
-                            input,
-                            partition_keys_mapping,
-                            df_schema,
-                            by,
-                            i,  # node number
-                            workers=[worker],
-                        )
-                    )
-                result = dask.dataframe.from_delayed(dask_futures)
-            return result
+        print(
+            "This function has been Deprecated. It is recommended to use ddf.shuffle(on=[colnames])"
+        )
 
     def sql(
         self,

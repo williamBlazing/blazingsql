@@ -275,6 +275,7 @@ def get_codTest(test_name):
         "Count without group by": "COUNTWOGRBY",
         "Cross join": "CROSSJOIN",
         "Date": "DATE",
+        "DayOfWeek": "DAYOFWEEK",
         "Dir": "DIR",
         "File System Google Storage": "FSGS",
         "Hdfs FileSystem": "FSHDFS",
@@ -300,6 +301,7 @@ def get_codTest(test_name):
         "Timestamp": "TIMESTAMP",
         "To_timestamp": "TO_TIMESTAMP",
         "TPCH Queries": "TPCH",
+        "Config Options": "TPCH", # we want the same outputs as the tpch test
         "Unary ops": "UNARYOPS",
         "Unify Tables": "UNIFYTBL",
         "Union": "UNION",

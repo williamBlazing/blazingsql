@@ -3,7 +3,9 @@
 #include <tuple>
 
 #include "BatchProcessing.h"
-#include "BlazingColumn.h"
+#include "ExceptionHandling/BlazingThread.h"
+#include "taskflow/distributing_kernel.h"
+/*#include "BlazingColumn.h"
 #include "LogicPrimitives.h"
 #include "CacheMachine.h"
 #include "io/Schema.h"
@@ -13,12 +15,11 @@
 #include "distribution/primitives.h"
 #include "taskflow/distributing_kernel.h"
 #include "error.hpp"
-#include "blazingdb/concurrency/BlazingThread.h"
+#include "blazingdb/concurrency/BlazingThread.h"*/
 #include "CodeTimer.h"
 #include <cudf/stream_compaction.hpp>
 #include <cudf/partitioning.hpp>
 #include <cudf/join.hpp>
-#include "utilities/DebuggingUtils.h"
 
 namespace ral {
 namespace batch {
@@ -72,8 +73,10 @@ public:
 		cache_machine_config.type = ral::cache::CacheType::SIMPLE;
 		cache_machine_config.context = context->clone();
 
-		this->leftArrayCache = 	ral::cache::create_cache_machine(cache_machine_config);
-		this->rightArrayCache = ral::cache::create_cache_machine(cache_machine_config);
+		std::string left_array_cache_name = std::to_string(this->get_id()) + "_left_array";
+		this->leftArrayCache = 	ral::cache::create_cache_machine(cache_machine_config, left_array_cache_name);
+		std::string right_array_cache_name = std::to_string(this->get_id()) + "_right_array";
+		this->rightArrayCache = ral::cache::create_cache_machine(cache_machine_config, right_array_cache_name);
 
 		std::tie(this->expression, this->condition, this->filter_statement, this->join_type) = parseExpressionToGetTypeAndCondition(this->expression);
 	}
@@ -569,7 +572,7 @@ public:
 									"query_id"_a=context->getContextToken(),
 									"step"_a=context->getQueryStep(),
 									"substep"_a=context->getQuerySubstep(),
-									"info"_a="left_num_rows_estimate was " + left_num_rows_estimate.first ? " valid" : " invalid",
+									"info"_a=left_num_rows_estimate.first ? "left_num_rows_estimate was valid" : "left_num_rows_estimate was invalid",
 									"duration"_a="",
 									"kernel_id"_a=this->get_id(),
 									"rows"_a=left_num_rows_estimate.second);
@@ -579,7 +582,7 @@ public:
 									"query_id"_a=context->getContextToken(),
 									"step"_a=context->getQueryStep(),
 									"substep"_a=context->getQuerySubstep(),
-									"info"_a="right_num_rows_estimate was " + right_num_rows_estimate.first ? " valid" : " invalid",
+									"info"_a=right_num_rows_estimate.first ? "right_num_rows_estimate was valid" : "right_num_rows_estimate was invalid",
 									"duration"_a="",
 									"kernel_id"_a=this->get_id(),
 									"rows"_a=right_num_rows_estimate.second);
@@ -642,8 +645,6 @@ public:
 		std::vector<int64_t> nodes_num_bytes_left(this->context->getTotalNodes());
 		std::vector<int64_t> nodes_num_bytes_right(this->context->getTotalNodes());
 
-
-		int64_t prev_total_rows = 0;
 		for (auto i = 0; i < determination_messages_to_wait_for.size(); i++)	{
 			auto message = this->query_graph->get_input_message_cache()->pullCacheData(determination_messages_to_wait_for[i]);
 			auto message_with_metadata = static_cast<ral::cache::GPUCacheDataMetaData*>(message.get());
