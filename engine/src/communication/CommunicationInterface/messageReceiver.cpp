@@ -104,4 +104,25 @@ void message_receiver::finish(cudaStream_t stream) {
               std::move(table), _metadata.get_values()[ral::cache::MESSAGE_ID], true);  
 }
 
+
+  ucp_tag_t message_receiver::build_ucp_tag(uint32_t message_id, uint16_t worker_origin_id, uint16_t frame_id){
+    return ((uint64_t) message_id << 32) | ((uint64_t) worker_origin_id << 16) | ((uint64_t) frame_id);
+  }
+
+  void message_receiver::increment_ucp_tag_frame_id(ucp_tag_t & tag) {
+    uint64_t temp_tag = tag;
+    uint32_t message_id = tag >> 32;
+    uint16_t worker_origin_id = (temp_tag << 32) >> 48;
+    uint16_t frame_id = (temp_tag << 48) >> 48;
+    frame_id++;
+    tag = ((uint64_t) message_id << 32) | ((uint64_t) worker_origin_id << 16) | ((uint64_t) frame_id);
+  }
+
+  void message_receiver::set_ucp_tag_frame_id(ucp_tag_t & tag, uint16_t frame_id) {
+    uint64_t temp_tag = tag;
+    uint32_t message_id = tag >> 32;
+    uint16_t worker_origin_id = (temp_tag << 32) >> 48;
+    tag = ((uint64_t) message_id << 32) | ((uint64_t) worker_origin_id << 16) | ((uint64_t) frame_id);
+  }
+
 } // namespace comm

@@ -251,13 +251,12 @@ ucx_buffer_transport::ucx_buffer_transport(size_t request_size,
 ucx_buffer_transport::~ucx_buffer_transport() {
 }
 
-std::atomic<int> atomic_message_id(0);
+std::atomic<uint32_t> atomic_message_id(0);
 
 ucp_tag_t ucx_buffer_transport::generate_message_tag() {
     auto current_message_id = atomic_message_id.fetch_add(1);
-    blazing_ucp_tag blazing_tag = {current_message_id, ral_id, 0U};
-    this->message_id = blazing_tag.message_id;
-    return *reinterpret_cast<ucp_tag_t *>(&blazing_tag);
+    this->message_id = current_message_id;
+    return message_receiver::build_ucp_tag(current_message_id, ral_id, 0U);
 }
 
 void ucx_buffer_transport::send_begin_transmission() {
@@ -268,7 +267,6 @@ void ucx_buffer_transport::send_begin_transmission() {
         int i = 0;
         for(auto const & node : destinations) {
             char * request = new char[_request_size];
-            //auto temp_tag = *reinterpret_cast<blazing_ucp_tag *>(&tag);
             auto status = ucp_tag_send_nbr(
                 node.get_ucp_endpoint(), buffer_to_send->data(), buffer_to_send->size(), ucp_dt_make_contig(1), tag, request + _request_size);
 
@@ -283,7 +281,7 @@ void ucx_buffer_transport::send_begin_transmission() {
 
             i++;
         }
-        reinterpret_cast<blazing_ucp_tag *>(&tag)->frame_id++;
+        message_receiver::increment_ucp_tag_frame_id(tag);
     } catch(std::exception & e){
         auto logger = spdlog::get("batch_logger");
         if (logger){
@@ -296,14 +294,13 @@ void ucx_buffer_transport::send_begin_transmission() {
 
 void ucx_buffer_transport::send_impl(const char * buffer, size_t buffer_size) {
     try {
-        blazing_ucp_tag blazing_tag = *reinterpret_cast<blazing_ucp_tag *>(&tag);
         for (auto const &node : destinations) {
             char *request = new char[_request_size];
             auto status = ucp_tag_send_nbr(node.get_ucp_endpoint(),
                                             buffer,
                                             buffer_size,
                                             ucp_dt_make_contig(1),
-                                            *reinterpret_cast<ucp_tag_t *>(&blazing_tag),
+                                            tag,
                                             request + _request_size);
 
             if (!UCS_STATUS_IS_ERR(status)) {
@@ -312,7 +309,7 @@ void ucx_buffer_transport::send_impl(const char * buffer, size_t buffer_size) {
                 throw std::runtime_error("Immediate Communication error in send_impl.");
             }
         }
-        reinterpret_cast<blazing_ucp_tag *>(&tag)->frame_id++;
+        message_receiver::increment_ucp_tag_frame_id(tag);
     } catch(std::exception & e){
         auto logger = spdlog::get("batch_logger");
         if (logger){
