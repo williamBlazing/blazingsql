@@ -153,8 +153,8 @@ private:
 
 
 
-static const ucp_tag_t begin_tag_mask =        0xFFFF000000000000;
-static const ucp_tag_t message_tag_mask =      0x0000FFFFFFFFFFFF;
+static const ucp_tag_t begin_tag_mask =        0xFFFFFFFFFFFFFFFF >> 48; //0x000000000000FFFF;
+static const ucp_tag_t message_tag_mask =      0xFFFFFFFFFFFFFFFF << 16; //0xFFFFFFFFFFFF0000;
 static const ucp_tag_t acknownledge_tag_mask = 0xFFFFFFFFFFFFFFFF;
 
 
