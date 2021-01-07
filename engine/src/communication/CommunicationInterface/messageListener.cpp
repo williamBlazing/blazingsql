@@ -23,6 +23,8 @@ void poll_for_frames(std::shared_ptr<message_receiver> receiver,
                      const std::size_t request_size){
 	
 	try {
+		ucp_tag_t message_tag = tag;
+
 		if (receiver->num_buffers() == 0) {
 			receiver->finish();
 			return;
@@ -31,14 +33,14 @@ void poll_for_frames(std::shared_ptr<message_receiver> receiver,
 		for (size_t buffer_id = 0; buffer_id < receiver->num_buffers(); buffer_id++) {
 			receiver->allocate_buffer(buffer_id);
 
-			message_receiver::set_ucp_tag_frame_id(tag, buffer_id + 1);
+			message_receiver::set_ucp_tag_frame_id(message_tag, buffer_id + 1);
 
 			char *request = new char[request_size];
 			ucs_status_t status = ucp_tag_recv_nbr(ucp_worker,
 												receiver->get_buffer(buffer_id),
 												receiver->buffer_size(buffer_id),
 												ucp_dt_make_contig(1),
-												tag,
+												message_tag,
 												acknownledge_tag_mask,
 												request + request_size);
 

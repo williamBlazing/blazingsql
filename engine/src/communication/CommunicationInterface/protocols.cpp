@@ -294,13 +294,14 @@ void ucx_buffer_transport::send_begin_transmission() {
 
 void ucx_buffer_transport::send_impl(const char * buffer, size_t buffer_size) {
     try {
+        ucp_tag_t blazing_tag = tag;
         for (auto const &node : destinations) {
             char *request = new char[_request_size];
             auto status = ucp_tag_send_nbr(node.get_ucp_endpoint(),
                                             buffer,
                                             buffer_size,
                                             ucp_dt_make_contig(1),
-                                            tag,
+                                            blazing_tag,
                                             request + _request_size);
 
             if (!UCS_STATUS_IS_ERR(status)) {
