@@ -26,16 +26,17 @@ public:
 
    	static ucp_progress_manager * get_instance(ucp_worker_h ucp_worker, size_t request_size);
     static ucp_progress_manager * get_instance();
-    void add_recv_request(char * request, std::function<void()> callback, ucs_status_t status);
-    void add_send_request(char * request, std::function<void()> callback, ucs_status_t status);
+    void add_recv_request(char * request,  ucp_tag_t tag, std::function<void()> callback, ucs_status_t status);
+    void add_send_request(char * request,  ucp_tag_t tag, std::function<void()> callback, ucs_status_t status);
 
     void check_status(uint64_t request);
 private:
    struct request_struct{
         char * request;
+        ucp_tag_t tag;
         std::function<void()> callback;
         bool operator <(const request_struct & other) const{
-            return request < other.request;
+            return tag < other.tag;
         }
     };
     ucp_progress_manager(ucp_worker_h ucp_worker,size_t request_size);
@@ -50,8 +51,8 @@ private:
     std::set<request_struct> recv_requests;
     ucp_worker_h ucp_worker;
 
-    std::vector<uint64_t> completed;
-    std::map<uint64_t, uint64_t> statuses;
+    std::vector<ucp_tag_t> completed;
+    std::map<uint64_t, ucp_tag_t> statuses;
     uint64_t null_request_count = 0;
 
     void check_progress();

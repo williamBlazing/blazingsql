@@ -134,42 +134,42 @@ ucp_progress_manager::ucp_progress_manager(ucp_worker_h ucp_worker, size_t reque
     t.detach();
 }
 
-void ucp_progress_manager::add_recv_request(char * request, std::function<void()> callback, ucs_status_t status){
+void ucp_progress_manager::add_recv_request(char * request, ucp_tag_t tag, std::function<void()> callback, ucs_status_t status){
     if(status == UCS_OK){
         delete request;
         callback();
     }else{
         std::lock_guard<std::mutex> lock(request_mutex);
-        recv_requests.insert({request, callback});
+        recv_requests.insert({request, tag, callback});
         cv.notify_all(); 
     }
            
 }
 
 
-void ucp_progress_manager::add_send_request(char * request, std::function<void()> callback, ucs_status_t status){
+void ucp_progress_manager::add_send_request(char * request, ucp_tag_t tag, std::function<void()> callback, ucs_status_t status){
     if(status == UCS_OK){
         delete request;
         callback();
     }else{
         std::lock_guard<std::mutex> lock(request_mutex);
-        send_requests.insert({request, callback});
+        send_requests.insert({request, tag, callback});
         cv.notify_all();
     }
 
 }
 
-void ucp_progress_manager::check_status(uint64_t request){
-    auto it = find(completed.begin(), completed.end(), request);
+void ucp_progress_manager::check_status(ucp_tag_t tag){
+    auto it = find(completed.begin(), completed.end(), tag);
     std::string was_completed = it != completed.end() ? " was completed " : " was not completed ";
 
-    auto it2 = statuses.find(request);
-    std::string was_statused = it2 != statuses.end() ? (" statuses count: " + std::to_string(statuses[request])) : " was not statused ";
+    auto it2 = statuses.find(tag);
+    std::string was_statused = it2 != statuses.end() ? (" statuses count: " + std::to_string(statuses[tag])) : " was not statused ";
 
     auto logger = spdlog::get("batch_logger");
     if (logger){
         logger->error("|||{info}|||||",
-                "info"_a="ucp_progress_manager::check_status for " + std::to_string(request) + was_completed + was_statused + " null request count: " + std::to_string(null_request_count));
+                "info"_a="ucp_progress_manager::check_status for " + std::to_string(tag) + was_completed + was_statused + " null request count: " + std::to_string(null_request_count));
     }
 }
 
@@ -200,18 +200,18 @@ void ucp_progress_manager::check_progress(){
                 auto status = ucp_request_check_status(req_struct.request + _request_size);
                 // std::cout<<"checked status of "<<(void *) req_struct.request<<" it was "<<status <<std::endl;
                 if (req_struct.request){
-                    auto it = statuses.find((uint64_t)req_struct.request);
+                    auto it = statuses.find(req_struct.tag);
                     if (it != statuses.end()){
-                        statuses[(uint64_t)req_struct.request]++;
+                        statuses[req_struct.tag]++;
                     } else {
-                        statuses[(uint64_t)req_struct.request] = 1;
+                        statuses[req_struct.tag] = 1;
                     }
                 } else {
                     null_request_count++;
                 }
                 
                 if (status == UCS_OK){
-                    completed.push_back((uint64_t)req_struct.request);
+                    completed.push_back(req_struct.tag);
                     req_struct.callback();
                     {
                         std::lock_guard<std::mutex> lock(request_mutex);
@@ -312,7 +312,7 @@ void ucx_buffer_transport::send_begin_transmission() {
             requests.push_back((uint64_t)request);
             status = ucp_request_check_status(request + _request_size);
             if (!UCS_STATUS_IS_ERR(status)) {
-                ucp_progress_manager::get_instance()->add_send_request(request, [buffer_to_send, this]() mutable {
+                ucp_progress_manager::get_instance()->add_send_request(request, tag, [buffer_to_send, this]() mutable {
                     buffer_to_send.reset();
                     this->increment_begin_transmission();
                 },status);
@@ -347,7 +347,7 @@ void ucx_buffer_transport::send_impl(const char * buffer, size_t buffer_size) {
             requests.push_back((uint64_t)request);
             status = ucp_request_check_status(request + _request_size);
             if ((status >= UCS_OK)) {
-                ucp_progress_manager::get_instance()->add_send_request(request, [this](){ this->increment_frame_transmission(); },status);
+                ucp_progress_manager::get_instance()->add_send_request(request, tag, [this](){ this->increment_frame_transmission(); },status);
             } else {
                 throw std::runtime_error("Immediate Communication error in send_impl.");
             }

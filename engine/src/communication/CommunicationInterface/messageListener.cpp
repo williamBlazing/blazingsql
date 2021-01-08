@@ -54,7 +54,7 @@ void poll_for_frames(std::shared_ptr<message_receiver> receiver,
 						}
 						delete request;
 					}else{
-						ucp_progress_manager::get_instance()->add_recv_request(request, [tag](){
+						ucp_progress_manager::get_instance()->add_recv_request(request, tag, [tag](){
 						auto receiver = ucx_message_listener::get_instance()->get_receiver(tag & message_tag_mask);
 						receiver->confirm_transmission();
 						if (receiver->is_finished()) {
@@ -241,7 +241,7 @@ void ucx_message_listener::poll_begin_message_tag(bool running_from_unit_test){
 								delete request;
 							}else{
 								ucp_progress_manager::get_instance()->add_recv_request(
-									request, 
+									request, info_tag->sender_tag, 
 									[info_tag, data_buffer{std::move(data_buffer)}, request_size=_request_size](){ 
 										recv_begin_callback_c(info_tag, std::move(data_buffer), request_size); }
 									,status);
