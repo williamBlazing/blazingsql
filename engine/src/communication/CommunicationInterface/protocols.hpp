@@ -28,6 +28,8 @@ public:
     static ucp_progress_manager * get_instance();
     void add_recv_request(char * request, std::function<void()> callback, ucs_status_t status);
     void add_send_request(char * request, std::function<void()> callback, ucs_status_t status);
+
+    void check_status(uint64_t request);
 private:
    struct request_struct{
         char * request;
@@ -47,6 +49,10 @@ private:
     std::set<request_struct> send_requests;
     std::set<request_struct> recv_requests;
     ucp_worker_h ucp_worker;
+
+    std::vector<uint64_t> completed;
+    std::map<uint64_t, std::vector<int8_t>> statuses;
+
     void check_progress();
 };
 

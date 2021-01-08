@@ -148,15 +148,35 @@ void ucp_progress_manager::add_recv_request(char * request, std::function<void()
 
 
 void ucp_progress_manager::add_send_request(char * request, std::function<void()> callback, ucs_status_t status){
-    // if(status == UCS_OK){
-    //     delete request;
-    //     callback();
-    // }else{
+    if(status == UCS_OK){
+        delete request;
+        callback();
+    }else{
         std::lock_guard<std::mutex> lock(request_mutex);
         send_requests.insert({request, callback});
         cv.notify_all();
-    // }
+    }
 
+}
+
+void ucp_progress_manager::check_status(uint64_t request){
+    auto it = find(completed.begin(), completed.end(), request);
+    std::string was_completed = it != completed.end() ? " was completed " : " was not completed ";
+
+    auto it2 = statuses.find(request);
+    std::string was_statused = it2 != statuses.end() ? " statuses: " : " was not statused ";
+
+    if (it2 != statuses.end()){
+        for (auto status : statuses[request]){
+            was_statused += std::to_string(status) + " ";
+        }
+    }
+    
+    auto logger = spdlog::get("batch_logger");
+    if (logger){
+        logger->error("|||{info}|||||",
+                "info"_a="ucp_progress_manager::check_status for " + std::to_string(request) + was_completed + was_statused);
+    }
 }
 
 void ucp_progress_manager::check_progress(){
@@ -172,19 +192,10 @@ void ucp_progress_manager::check_progress(){
                 //     return (send_requests.size() + recv_requests.size()) > 0;
                 // }) ;
                 // }
-                if(! cv.wait_for(lock,100ms,[this]{
+                cv.wait_for(lock,100ms,[this]{
                     return (send_requests.size() + recv_requests.size()) > 0;
-                })){
-                    if((send_requests.size() + recv_requests.size()) > 0){
-                    std::cout<<"send_requests in flight"<<send_requests.size()<<std::endl;
-                    std::cout<<"recv_requests in flight"<<recv_requests.size()<<std::endl;
+                });
 
-                    }else{
-                    std::cout<<"I am empty"<<std::endl;
-       
-                    }
-
-                }
                 cur_send_requests = send_requests;
                 cur_recv_requests = recv_requests;
             }
@@ -194,8 +205,15 @@ void ucp_progress_manager::check_progress(){
             for(const auto & req_struct : cur_send_requests){
                 auto status = ucp_request_check_status(req_struct.request + _request_size);
                 // std::cout<<"checked status of "<<(void *) req_struct.request<<" it was "<<status <<std::endl;
+                auto it = statuses.find((uint64_t)req_struct.request);
+                if (it != statuses.end()){
+                    statuses[(uint64_t)req_struct.request].push_back((int8_t)status);
+                } else {
+                    statuses[(uint64_t)req_struct.request] = {(int8_t)status};
+                }
+                
                 if (status == UCS_OK){
-
+                    completed.push_back((uint64_t)req_struct.request);
                     req_struct.callback();
                     {
                         std::lock_guard<std::mutex> lock(request_mutex);
@@ -328,7 +346,7 @@ void ucx_buffer_transport::send_impl(const char * buffer, size_t buffer_size) {
                                             ucp_dt_make_contig(1),
                                             tag,
                                             request + _request_size);
-
+            status = ucp_request_check_status(request + _request_size);
             if ((status >= UCS_OK)) {
                 ucp_progress_manager::get_instance()->add_send_request(request, [this](){ this->increment_frame_transmission(); },status);
             } else {
