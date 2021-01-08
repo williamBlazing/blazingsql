@@ -164,18 +164,12 @@ void ucp_progress_manager::check_status(uint64_t request){
     std::string was_completed = it != completed.end() ? " was completed " : " was not completed ";
 
     auto it2 = statuses.find(request);
-    std::string was_statused = it2 != statuses.end() ? " statuses: " : " was not statused ";
+    std::string was_statused = it2 != statuses.end() ? (" statuses count: " + std::to_string(statuses[request])) : " was not statused ";
 
-    if (it2 != statuses.end()){
-        for (auto status : statuses[request]){
-            was_statused += std::to_string(status) + " ";
-        }
-    }
-    
     auto logger = spdlog::get("batch_logger");
     if (logger){
         logger->error("|||{info}|||||",
-                "info"_a="ucp_progress_manager::check_status for " + std::to_string(request) + was_completed + was_statused);
+                "info"_a="ucp_progress_manager::check_status for " + std::to_string(request) + was_completed + was_statused + " null request count: " + std::to_string(null_request_count));
     }
 }
 
@@ -205,11 +199,15 @@ void ucp_progress_manager::check_progress(){
             for(const auto & req_struct : cur_send_requests){
                 auto status = ucp_request_check_status(req_struct.request + _request_size);
                 // std::cout<<"checked status of "<<(void *) req_struct.request<<" it was "<<status <<std::endl;
-                auto it = statuses.find((uint64_t)req_struct.request);
-                if (it != statuses.end()){
-                    statuses[(uint64_t)req_struct.request].push_back((int8_t)status);
+                if (req_struct.request){
+                    auto it = statuses.find((uint64_t)req_struct.request);
+                    if (it != statuses.end()){
+                        statuses[(uint64_t)req_struct.request]++;
+                    } else {
+                        statuses[(uint64_t)req_struct.request] = 1;
+                    }
                 } else {
-                    statuses[(uint64_t)req_struct.request] = {(int8_t)status};
+                    null_request_count++;
                 }
                 
                 if (status == UCS_OK){

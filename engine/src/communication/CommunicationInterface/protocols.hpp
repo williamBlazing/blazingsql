@@ -51,7 +51,8 @@ private:
     ucp_worker_h ucp_worker;
 
     std::vector<uint64_t> completed;
-    std::map<uint64_t, std::vector<int8_t>> statuses;
+    std::map<uint64_t, uint64_t> statuses;
+    uint64_t null_request_count = 0;
 
     void check_progress();
 };
