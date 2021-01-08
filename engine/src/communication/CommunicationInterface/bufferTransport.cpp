@@ -1,5 +1,6 @@
 #include "bufferTransport.hpp"
 #include "CodeTimer.h"
+#include "protocols.hpp"
 
 using namespace std::chrono_literals;
 using namespace fmt::literals;
@@ -146,6 +147,10 @@ void buffer_transport::wait_until_complete() {
 				logger->warn("|||{info}|{duration}||||",
 									"info"_a="buffer_transport::wait_until_complete() timed out. transmitted_frames: " + std::to_string(transmitted_frames) + " buffer_sizes.size(): " + std::to_string(buffer_sizes.size()) + " destinations.size(): " + std::to_string(destinations.size()),
 									"duration"_a=blazing_timer.elapsed_time());
+			}
+
+			for (auto request : requests){
+				ucp_progress_manager::get_instance()->check_status(request);
 			}
 		}
 		return done_waiting;

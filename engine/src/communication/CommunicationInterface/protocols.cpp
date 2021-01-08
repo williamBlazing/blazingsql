@@ -305,13 +305,13 @@ void ucx_buffer_transport::send_begin_transmission() {
     try {
         std::shared_ptr<std::vector<char>> buffer_to_send = std::make_shared<std::vector<char>>(detail::serialize_metadata_and_transports_and_buffer_sizes(metadata, column_transports, buffer_sizes));
 
-        std::vector<char *> requests(destinations.size());
         int i = 0;
         for(auto const & node : destinations) {
             char * request = new char[_request_size];
             //auto temp_tag = *reinterpret_cast<blazing_ucp_tag *>(&tag);
             auto status = ucp_tag_send_nbr(
                 node.get_ucp_endpoint(), buffer_to_send->data(), buffer_to_send->size(), ucp_dt_make_contig(1), tag, request + _request_size);
+            requests.push_back((uint64_t)request);
             status = ucp_request_check_status(request + _request_size);
             if (!UCS_STATUS_IS_ERR(status)) {
                 ucp_progress_manager::get_instance()->add_send_request(request, [buffer_to_send, this]() mutable {
@@ -346,6 +346,7 @@ void ucx_buffer_transport::send_impl(const char * buffer, size_t buffer_size) {
                                             ucp_dt_make_contig(1),
                                             tag,
                                             request + _request_size);
+            requests.push_back((uint64_t)request);
             status = ucp_request_check_status(request + _request_size);
             if ((status >= UCS_OK)) {
                 ucp_progress_manager::get_instance()->add_send_request(request, [this](){ this->increment_frame_transmission(); },status);

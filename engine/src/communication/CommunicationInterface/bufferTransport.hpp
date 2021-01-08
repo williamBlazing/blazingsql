@@ -100,6 +100,8 @@ protected:
 	std::mutex mutex;
 	std::condition_variable completion_condition_variable;
 	std::vector<node> destinations;
+
+	std::vector<uint64_t> requests;
 };
 
 
