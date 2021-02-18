@@ -157,6 +157,10 @@ void allocation_pool::grow() {
 void allocation_pool::free_chunk(std::unique_ptr<blazing_allocation_chunk> buffer) {
   std::unique_lock<std::mutex> lock(in_use_mutex);
   buffer->allocation->allocation_chunks.push(std::move(buffer));
+  // TODO PERCY21 if when we add the chunk back to the allocation, it now has all the allocations it needs, they free the allocation
+  // BUT only free the allocation if its not the very first allocation
+  // freeing the allocation means freeing the memory and deleting it from the allocation pool
+  // make sure things are "locked" when doing that to make sure its thread safe
   this->allocation_counter--;
 }
 
@@ -184,6 +188,7 @@ static std::shared_ptr<allocation_pool> host_buffer_instance{};
 static std::shared_ptr<allocation_pool> pinned_buffer_instance{};
 
 
+// this function is what originally initialized the pinned memory and host memory allocation pools
 void set_allocation_pools(std::size_t size_buffers_host, std::size_t num_buffers_host,
 std::size_t size_buffers_pinned, std::size_t num_buffers_pinned, bool map_ucx,
     ucp_context_h context) {

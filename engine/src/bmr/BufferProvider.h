@@ -27,12 +27,13 @@ class base_allocator;
 class allocation_pool;
 
 
+// This stuct is what actually holds the pinned memory allocation
 struct blazing_allocation{
-
-    std::size_t size;
-    char *data;    
-    std::stack< std::unique_ptr<blazing_allocation_chunk> > allocation_chunks;
-    allocation_pool * pool;  // this is to know how to free
+    std::size_t size; // the size in bytes of the allocation
+    std::size_t total_number_of_chunks; // TODO PERCY21 (add this variable during the contruction of this struct) number of chunks when originally created
+    char *data;    // the pointer to the allocated memory
+    std::stack< std::unique_ptr<blazing_allocation_chunk> > allocation_chunks; // These are the available chunks that are part of the allocation. 
+    allocation_pool * pool;  // this is the pool that was used to make this allocation, and therefore this is what we would use to free it
 };
 
 struct blazing_allocation_chunk{
