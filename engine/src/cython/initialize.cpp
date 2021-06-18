@@ -315,8 +315,11 @@ std::pair<std::pair<std::shared_ptr<CacheMachine>,std::shared_ptr<CacheMachine> 
 	//to avoid redundancy the default value or user defined value for this parameter is placed on the pyblazing side
 	assert( config_options.find("BLAZ_HOST_MEM_CONSUMPTION_THRESHOLD") != config_options.end() );
 	float host_memory_quota = std::stof(config_options["BLAZ_HOST_MEM_CONSUMPTION_THRESHOLD"]);
-
 	blazing_host_memory_resource::getInstance().initialize(host_memory_quota);
+
+	assert( config_options.find("BLAZ_PINNED_MEM_CONSUMPTION_THRESHOLD") != config_options.end() );
+	float pinned_memory_quota = std::stof(config_options["BLAZ_PINNED_MEM_CONSUMPTION_THRESHOLD"]);
+	blazing_pinned_memory_resource::getInstance().initialize(pinned_memory_quota);
 
 	// Init AWS S3
 	BlazingContext::getInstance()->initExternalSystems();

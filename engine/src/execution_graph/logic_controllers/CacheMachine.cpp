@@ -350,8 +350,17 @@ bool CacheMachine::addToCache(std::unique_ptr<ral::frame::BlazingTable> table, s
 
 				} else {
 					if(cacheIndex == 1) {
-						std::unique_ptr<CacheData> cache_data;
-						cache_data = std::make_unique<CPUCacheData>(std::move(table), metadata, use_pinned);
+                        if (use_pinned){
+                            // lets make sure we dont go over the limit when using pinned memory
+                            memory_to_use = (blazing_pinned_memory_resource::getInstance().get_memory_used() + table->sizeInBytes());
+                            if( memory_to_use > blazing_pinned_memory_resource::getInstance().get_memory_limit()){
+                                use_pinned = false;
+                                std::cout<<"PINNNNNNNNNNNNNNNNED? used pinned"<<std::endl;
+                            } else {
+                                std::cout<<"PINNNNNNNNNNNNNNNNED? COUNT NOT USE pinned"<<std::endl;
+                            }
+                        }
+						std::unique_ptr<CacheData> cache_data = std::make_unique<CPUCacheData>(std::move(table), metadata, use_pinned);
 							
 						auto item =	std::make_unique<message>(std::move(cache_data), message_id);
 						this->waitingCache->put(std::move(item));

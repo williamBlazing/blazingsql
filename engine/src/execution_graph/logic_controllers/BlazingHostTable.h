@@ -25,7 +25,8 @@ public:
 
     BlazingHostTable(const std::vector<ColumnTransport> &columns_offsets,
         std::vector<ral::memory::blazing_chunked_column_info> && chunked_column_infos,
-        std::vector<std::unique_ptr<ral::memory::blazing_allocation_chunk>> && allocations);
+        std::vector<std::unique_ptr<ral::memory::blazing_allocation_chunk>> && allocations,
+        bool use_pinned);
 
     ~BlazingHostTable();
 
@@ -57,7 +58,7 @@ private:
     std::vector<ColumnTransport> columns_offsets;
     std::vector<ral::memory::blazing_chunked_column_info> chunked_column_infos;
     std::vector<std::unique_ptr<ral::memory::blazing_allocation_chunk>> allocations;
-
+    bool use_pinned;
     
     size_t part_id;
 };

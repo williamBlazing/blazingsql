@@ -359,7 +359,7 @@ protected:
 	CPUCacheData(const std::vector<blazingdb::transport::ColumnTransport> & column_transports,
     		    std::vector<ral::memory::blazing_chunked_column_info> && chunked_column_infos,
         		std::vector<std::unique_ptr<ral::memory::blazing_allocation_chunk>> && allocations,
-				const MetadataDictionary & metadata);
+				const MetadataDictionary & metadata, bool use_pinned);
 
 	/**
  	* Constructor

@@ -1220,7 +1220,8 @@ def load_config_options_from_env(user_config_options: dict):
         "MAX_ORDER_BY_SAMPLES_PER_NODE": 10000,
         "BLAZING_PROCESSING_DEVICE_MEM_CONSUMPTION_THRESHOLD": 0.9,
         "BLAZING_DEVICE_MEM_CONSUMPTION_THRESHOLD": 0.6,
-        "BLAZ_HOST_MEM_CONSUMPTION_THRESHOLD": 0.75,
+        "BLAZ_HOST_MEM_CONSUMPTION_THRESHOLD": 0.6,
+        "BLAZ_PINNED_MEM_CONSUMPTION_THRESHOLD": 0.15,
         "BLAZING_LOGGING_DIRECTORY": "blazing_log",
         "BLAZING_CACHE_DIRECTORY": "/tmp/",
         "BLAZING_LOCAL_LOGGING_DIRECTORY": "blazing_log",
@@ -1358,7 +1359,16 @@ class BlazingContext(object):
                 among all of them in equal parts.
                 **NOTE:** This parameter only works when used in the
                 BlazingContext
-                **Default:** ``0.75``
+                **Default:** ``0.6``
+            BLAZ_PINNED_MEM_CONSUMPTION_THRESHOLD: float
+                The percent
+                (as a decimal) of total host memory that the memory
+                resource will consider to be full. In the presence of
+                several GPUs per server, this resource will be shared
+                among all of them in equal parts.
+                **NOTE:** This parameter only works when used in the
+                BlazingContext
+                **Default:** ``0.15``
             BLAZING_LOGGING_DIRECTORY: string
                 A folder path to place all logging
                 files. The path can be relative or absolute.
@@ -1496,12 +1506,6 @@ class BlazingContext(object):
 
         self.dask_client = dask_client
 
-        host_memory_quota = 0.75
-        if not "BLAZ_HOST_MEM_CONSUMPTION_THRESHOLD".encode() in self.config_options:
-            self.config_options["BLAZ_HOST_MEM_CONSUMPTION_THRESHOLD".encode()] = str(
-                host_memory_quota
-            ).encode()
-
         if dask_client is not None:
             # if the user does not explicitly set it, it will be set by whatever dask client is using
             if self.config_options["PROTOCOL".encode()] == "AUTO".encode():
@@ -1546,9 +1550,16 @@ class BlazingContext(object):
                 raise Exception("No workers registered on the scheduler")
 
             host_list = [value["host"] for key, value in workers_info.items()]
+            host_memory_quota = float(config_options["BLAZ_HOST_MEM_CONSUMPTION_THRESHOLD".encode()].decode())
+            pinned_memory_quota = float(config_options["BLAZ_PINNED_MEM_CONSUMPTION_THRESHOLD".encode()].decode())
+            
             self.config_options["BLAZ_HOST_MEM_CONSUMPTION_THRESHOLD".encode()] = str(
                 host_memory_quota * len(set(host_list)) / len(workers_info)
             ).encode()
+            self.config_options["BLAZ_PINNED_MEM_CONSUMPTION_THRESHOLD".encode()] = str(
+                pinned_memory_quota * len(set(host_list)) / len(workers_info)
+            ).encode()
+
             # Start listener on each worker to send received messages to router
             worker_maps = listen(self.dask_client, network_interface=network_interface)
             workers = list(self.dask_client.scheduler_info()["workers"])

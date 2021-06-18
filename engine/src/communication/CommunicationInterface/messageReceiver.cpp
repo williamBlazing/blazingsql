@@ -60,7 +60,7 @@ void message_receiver::allocate_buffer(uint16_t index, cudaStream_t stream){
   if (index >= _raw_buffers.size()) {
     throw std::runtime_error("Invalid access to raw buffer");
   }
-  _raw_buffers[index] = ral::memory::buffer_providers::get_pinned_buffer_provider()->get_chunk();
+  _raw_buffers[index] = ral::memory::buffer_providers::get_host_buffer_provider()->get_chunk();
 }
 
 node message_receiver::get_sender_node(){
@@ -111,7 +111,7 @@ void message_receiver::finish(cudaStream_t stream) {
     }
     
     std::unique_ptr<ral::cache::CacheData> table = 
-        std::make_unique<ral::cache::CPUCacheData>(_column_transports, std::move(_chunked_column_infos), std::move(_raw_buffers), _metadata);
+        std::make_unique<ral::cache::CPUCacheData>(_column_transports, std::move(_chunked_column_infos), std::move(_raw_buffers), _metadata, false);
         
     _output_cache->addCacheData(
                 std::move(table), _metadata.get_values()[ral::cache::MESSAGE_ID], true);  

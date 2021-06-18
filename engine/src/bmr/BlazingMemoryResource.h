@@ -229,24 +229,21 @@ public:
    /** -----------------------------------------------------------------------*
    * @brief Initialize
    * 
-   * Accepts an optional rmmOptions_t struct that describes the settings used
-   * to initialize the memory manager. If no `options` is passed, default
-   * options are used.
+   * Accepts a consumption threshold
    * 
-   * @param[in] options Optional options to set
+   * @param[in] mem_resouce_consumption_thresh A consumption threshold
    * ----------------------------------------------------------------------**/
-    void initialize(float host_mem_resouce_consumption_thresh);
+    void initialize(float mem_resouce_consumption_thresh);
 
      /** -----------------------------------------------------------------------*
-     * @brief Shut down the blazing_device_memory_resource (clears the context)
+     * @brief Shut down the blazing_host_memory_resource
      * ----------------------------------------------------------------------**/
     void finalize();
-
     /** -----------------------------------------------------------------------*
-     * @brief Check whether the blazing_device_memory_resource has been initialized.
+     * @brief Check whether the blazing_host_memory_resource has been initialized.
      * 
-     * @return true if blazing_device_memory_resource has been initialized.
-     * @return false if blazing_device_memory_resource has not been initialized.
+     * @return true if blazing_host_memory_resource has been initialized.
+     * @return false if blazing_host_memory_resource has not been initialized.
      * ----------------------------------------------------------------------**/
     bool isInitialized();
 
@@ -260,6 +257,100 @@ private:
     bool is_initialized{false};
 
     std::unique_ptr<internal_blazing_host_memory_resource> initialized_resource{};
+};
+
+/**
+    @brief This class represents a custom pinned memory resource used in the cache system.
+*/
+// TODO WSM want to have the internal_blazing_host_memory_resource and internal_blazing_pinned_memory_resource actually be connected to the the buffer providers which actually do the allocations
+class internal_blazing_pinned_memory_resource{
+public:
+    internal_blazing_pinned_memory_resource(float custom_threshold);
+
+    virtual ~internal_blazing_pinned_memory_resource() = default;
+
+    void allocate(std::size_t bytes);
+
+    void deallocate(std::size_t bytes);
+
+    size_t get_from_driver_used_memory();
+
+    size_t get_memory_used();
+
+    size_t get_total_memory();
+
+    size_t get_memory_limit();
+
+private:
+    size_t memory_limit;
+    size_t total_memory_size;
+    std::atomic<std::size_t> used_memory_size;
+};
+
+
+/** -------------------------------------------------------------------------*
+ * @brief blazing_pinned_memory_resource class maintains the host memory manager context.
+ * 
+ * blazing_pinned_memory_resource is a singleton class, and should be accessed via getInstance(). 
+ * A number of static convenience methods are provided that wrap getInstance()..
+ * ------------------------------------------------------------------------**/
+class blazing_pinned_memory_resource : public BlazingMemoryResource {
+public:
+    /** -----------------------------------------------------------------------*
+     * @brief Get the blazing_pinned_memory_resource instance singleton object
+     * 
+     * @return blazing_pinned_memory_resource& the blazing_pinned_memory_resource singleton
+     * ----------------------------------------------------------------------**/
+    static blazing_pinned_memory_resource& getInstance() {
+        // Myers' singleton. Thread safe and unique. Note: C++11 required.
+        static blazing_pinned_memory_resource instance;
+        return instance;
+    }
+
+    size_t get_memory_used() override;
+
+    size_t get_total_memory() override;
+
+    size_t get_from_driver_used_memory();
+
+    size_t get_memory_limit();
+
+    void allocate(std::size_t bytes);
+
+    void deallocate(std::size_t bytes);
+
+   /** -----------------------------------------------------------------------*
+   * @brief Initialize
+   * 
+   * Accepts a consumption threshold
+   * 
+   * @param[in] mem_resouce_consumption_thresh A consumption threshold
+   * ----------------------------------------------------------------------**/
+    void initialize(float mem_resouce_consumption_thresh);
+
+     /** -----------------------------------------------------------------------*
+     * @brief Shut down the blazing_pinned_memory_resource
+     * ----------------------------------------------------------------------**/
+    void finalize();
+
+    /** -----------------------------------------------------------------------*
+     * @brief Check whether the blazing_pinned_memory_resource has been initialized.
+     * 
+     * @return true if blazing_pinned_memory_resource has been initialized.
+     * @return false if blazing_pinned_memory_resource has not been initialized.
+     * ----------------------------------------------------------------------**/
+    bool isInitialized();
+
+private:
+    blazing_pinned_memory_resource() = default;
+    ~blazing_pinned_memory_resource() = default;
+    blazing_pinned_memory_resource(const blazing_pinned_memory_resource&) = delete;
+    blazing_pinned_memory_resource& operator=(const blazing_pinned_memory_resource&) = delete;
+    std::mutex manager_mutex;
+
+    bool is_initialized{false};
+
+    std::unique_ptr<internal_blazing_pinned_memory_resource> initialized_resource{};
 };
 
 /**

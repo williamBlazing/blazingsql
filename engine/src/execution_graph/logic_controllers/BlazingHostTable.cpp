@@ -10,17 +10,26 @@ namespace frame {
 
 BlazingHostTable::BlazingHostTable(const std::vector<ColumnTransport> &columns_offsets,
             std::vector<ral::memory::blazing_chunked_column_info> && chunked_column_infos,
-            std::vector<std::unique_ptr<ral::memory::blazing_allocation_chunk>> && allocations)
-        : columns_offsets{columns_offsets}, chunked_column_infos{std::move(chunked_column_infos)}, allocations{std::move(allocations)} {
+            std::vector<std::unique_ptr<ral::memory::blazing_allocation_chunk>> && allocations,
+            bool use_pinned)
+        : columns_offsets{columns_offsets}, chunked_column_infos{std::move(chunked_column_infos)}, allocations{std::move(allocations)}, use_pinned{use_pinned} {
 
     auto size = sizeInBytes();
-    blazing_host_memory_resource::getInstance().allocate(size); // this only increments the memory usage counter for the host memory. This does not actually allocate
+    if (use_pinned){
+        blazing_pinned_memory_resource::getInstance().allocate(size); // this only increments the memory usage counter for the host memory. This does not actually allocate
+    } else {
+        blazing_host_memory_resource::getInstance().allocate(size); // this only increments the memory usage counter for the host memory. This does not actually allocate
+    }
 
 }
 
 BlazingHostTable::~BlazingHostTable() {
     auto size = sizeInBytes();
-    blazing_host_memory_resource::getInstance().deallocate(size); // this only decrements the memory usage counter for the host memory. This does not actually allocate
+    if (use_pinned){
+        blazing_pinned_memory_resource::getInstance().deallocate(size); // this only decrements the memory usage counter for the host memory. This does not actually decrements
+    } else {
+        blazing_host_memory_resource::getInstance().deallocate(size); // this only decrements the memory usage counter for the host memory. This does not actually decrements
+    }
     for(auto i = 0; i < allocations.size(); i++){
         auto pool = allocations[i]->allocation->pool;
         pool->free_chunk(std::move(allocations[i]));
