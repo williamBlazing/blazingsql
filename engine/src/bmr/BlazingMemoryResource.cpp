@@ -322,6 +322,107 @@ size_t internal_blazing_host_memory_resource::get_memory_limit() {
 
 // END blazing_host_memory_resource
 
+
+// BEGIN internal_blazing_pinned_memory_resource
+
+// TODO: percy,cordova. Improve the design of get memory in real time 
+internal_blazing_pinned_memory_resource::internal_blazing_pinned_memory_resource(float custom_threshold)
+{
+    struct sysinfo si;
+    if (sysinfo(&si) < 0) {
+        std::cerr << "@@ error sysinfo host "<< std::endl;
+    } 
+    total_memory_size = (size_t)si.freeram;
+    used_memory_size = 0;
+    memory_limit = custom_threshold * total_memory_size;
+}
+
+void internal_blazing_pinned_memory_resource::allocate(std::size_t bytes)  {
+    used_memory_size +=  bytes;
+}
+
+void internal_blazing_pinned_memory_resource::deallocate(std::size_t bytes)  {
+    used_memory_size -= bytes;
+}
+
+size_t internal_blazing_pinned_memory_resource::get_from_driver_used_memory()  {
+    struct sysinfo si;
+    sysinfo (&si);
+    // NOTE: sync point 
+    total_memory_size = (size_t)si.totalram;
+    used_memory_size = total_memory_size - (size_t)si.freeram;
+    return used_memory_size;
+}
+
+size_t internal_blazing_pinned_memory_resource::get_memory_used() {
+    return used_memory_size;
+}
+
+size_t internal_blazing_pinned_memory_resource::get_total_memory() {
+    return total_memory_size;
+}
+
+size_t internal_blazing_pinned_memory_resource::get_memory_limit() {
+    return memory_limit;
+}
+
+// END internal_blazing_pinned_memory_resource
+
+// BEGIN blazing_pinned_memory_resource
+
+    size_t blazing_pinned_memory_resource::get_memory_used() {
+        return initialized_resource->get_memory_used();
+    }
+
+    size_t blazing_pinned_memory_resource::get_total_memory() {
+        return initialized_resource->get_total_memory() ;
+    }
+
+    size_t blazing_pinned_memory_resource::get_from_driver_used_memory() {
+        return initialized_resource->get_from_driver_used_memory();
+    }
+
+    size_t blazing_pinned_memory_resource::get_memory_limit() {
+        return initialized_resource->get_memory_limit() ;
+    }
+
+    void blazing_pinned_memory_resource::allocate(std::size_t bytes) {
+        initialized_resource->allocate(bytes);
+    }
+
+    void blazing_pinned_memory_resource::deallocate(std::size_t bytes) {
+        initialized_resource->deallocate(bytes);
+    }
+
+    void blazing_pinned_memory_resource::initialize(float host_mem_resouce_consumption_thresh) {
+        
+        std::lock_guard<std::mutex> guard(manager_mutex);
+
+        // repeat initialization is a no-op
+        if (isInitialized()) return;
+
+        initialized_resource.reset(new internal_blazing_pinned_memory_resource(host_mem_resouce_consumption_thresh));
+
+        is_initialized = true;
+    }
+
+    void blazing_pinned_memory_resource::finalize() {
+        std::lock_guard<std::mutex> guard(manager_mutex);
+
+        // finalization before initialization is a no-op
+        if (isInitialized()) {
+            initialized_resource.reset();
+            is_initialized = false;
+        }
+    }
+
+    bool blazing_pinned_memory_resource::isInitialized() {
+        return getInstance().is_initialized;
+    }
+
+// END blazing_pinned_memory_resource
+
+
 // BEGIN blazing_disk_memory_resource
 
 // TODO: percy, cordova.Improve the design of get memory in real time 

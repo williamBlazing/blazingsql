@@ -1550,8 +1550,8 @@ class BlazingContext(object):
                 raise Exception("No workers registered on the scheduler")
 
             host_list = [value["host"] for key, value in workers_info.items()]
-            host_memory_quota = float(config_options["BLAZ_HOST_MEM_CONSUMPTION_THRESHOLD".encode()].decode())
-            pinned_memory_quota = float(config_options["BLAZ_PINNED_MEM_CONSUMPTION_THRESHOLD".encode()].decode())
+            host_memory_quota = float(self.config_options["BLAZ_HOST_MEM_CONSUMPTION_THRESHOLD".encode()].decode())
+            pinned_memory_quota = float(self.config_options["BLAZ_PINNED_MEM_CONSUMPTION_THRESHOLD".encode()].decode())
             
             self.config_options["BLAZ_HOST_MEM_CONSUMPTION_THRESHOLD".encode()] = str(
                 host_memory_quota * len(set(host_list)) / len(workers_info)
