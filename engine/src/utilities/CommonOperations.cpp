@@ -78,6 +78,24 @@ bool checkIfConcatenatingStringsWillOverflow(const std::vector<BlazingTableView>
 }
 
 std::unique_ptr<BlazingTable> concatTables(std::vector<std::unique_ptr<BlazingTable>> tables){
+
+	if (tables.size() > 1){
+		auto base_schema = tables[0]->get_schema();
+		bool normalized_idx0 = false;
+		for(size_t i = 1; i < tables.size(); i++) {
+			auto schema = tables[i]->get_schema();
+			if (!std::equal(schema.begin(), schema.end(), base_schema.begin())){
+				auto common_types = ral::utilities::get_common_types(base_schema, schema, true);
+				if (!normalized_idx0) {
+					ral::utilities::normalize_types(tables[0], common_types);
+					normalized_idx0 = true;
+				}
+				ral::utilities::normalize_types(tables[i], common_types);				
+			}
+		}
+		
+	}
+
 	std::vector<BlazingTableView> tables_views(tables.size());
 	for (std::size_t i = 0; i < tables.size(); i++){
 		tables_views[i] = tables[i]->toBlazingTableView();

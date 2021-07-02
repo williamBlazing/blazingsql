@@ -9,7 +9,25 @@ ConcatCacheData::ConcatCacheData(std::vector<std::unique_ptr<CacheData>> cache_d
 	n_rows = 0;
 	for (auto && cache_data : _cache_datas) {
 		auto cache_schema = cache_data->get_schema();
-		RAL_EXPECTS(std::equal(schema.begin(), schema.end(), cache_schema.begin()), "Cache data has a different schema");
+		if (!std::equal(schema.begin(), schema.end(), cache_schema.begin())){
+			std::string err_msg = "Cache data has a different schema ";
+			for (int i = 0; i < _cache_datas.size(); i++){
+				std::vector<std::string> names = _cache_datas[i]->names();
+				auto types = _cache_datas[i]->get_schema();
+				err_msg = err_msg + "CacheData" + std::to_string(i) + " cols: ";
+				for (int j = 0; j < names.size(); j++){
+					err_msg = err_msg + names[j] + " (" + std::to_string((int)types[j].id()) + "), ";
+				}
+			}
+			std::shared_ptr<spdlog::logger> logger = spdlog::get("batch_logger");
+			if(logger){
+				logger->error("|||{info}|||||",
+											"info"_a=err_msg);
+				logger->flush();
+			}
+			if (schema.size() != cache_schema.size())
+				RAL_EXPECTS(std::equal(schema.begin(), schema.end(), cache_schema.begin()), "Cache data has a different schema");
+		}		
 		n_rows += cache_data->num_rows();
 	}
 }
